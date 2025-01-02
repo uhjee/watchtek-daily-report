@@ -9,6 +9,8 @@ export interface DailyReport {
     start: string;
     end: string | null;
   };
+  isToday: boolean;
+  isTomorrow: boolean;
 }
 
 // Notion API 응답 타입 (필요한 부분만 정의)
@@ -19,9 +21,11 @@ export interface NotionResponse {
 export interface NotionPage {
   properties: {
     Name: {
-      title: [{
-        plain_text: string;
-      }];
+      title: [
+        {
+          plain_text: string;
+        },
+      ];
     };
     Customer: {
       select: {
@@ -39,11 +43,13 @@ export interface NotionPage {
       };
     };
     Person: {
-      people: [{
-        person: {
-          email: string;
-        };
-      }];
+      people: [
+        {
+          person: {
+            email: string;
+          };
+        },
+      ];
     };
     Progress: {
       number: number;
@@ -54,5 +60,15 @@ export interface NotionPage {
         end: string | null;
       };
     };
+    isToday: {
+      formula: {
+        boolean: boolean;
+      };
+    };
+    isTomorrow: {
+      formula: {
+        boolean: boolean;
+      };
+    };
   };
-} 
+}

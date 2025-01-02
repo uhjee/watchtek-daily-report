@@ -43,16 +43,24 @@ export class ReportService {
     const filter = {
       and: [
         {
-          property: 'Date',
-          date: {
-            on_or_after: startDate,
-          },
-        },
-        {
-          property: 'Date',
-          date: {
-            on_or_before: calculatedEndDate,
-          },
+          or: [
+            {
+              property: 'isToday',
+              formula: {
+                checkbox: {
+                  equals: true,
+                },
+              },
+            },
+            {
+              property: 'isTomorrow',
+              formula: {
+                checkbox: {
+                  equals: true,
+                },
+              },
+            },
+          ],
         },
         {
           property: 'Person',
@@ -92,11 +100,13 @@ export class ReportService {
       group: report.properties.Group.select?.name || '',
       subGroup: report.properties.SubGroup.select?.name || '',
       person: report.properties.Person.people[0]?.person.email || '',
-      progressRate: report.properties.Progress.number || 0,
+      progressRate: (report.properties.Progress.number || 0) * 100,
       date: {
         start: report.properties.Date.date?.start || '',
         end: report.properties.Date.date?.end || null,
       },
+      isToday: report.properties.isToday.formula.boolean || false,
+      isTomorrow: report.properties.isTomorrow.formula.boolean || false,
     }));
   }
 }
