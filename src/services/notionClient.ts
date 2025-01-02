@@ -41,7 +41,6 @@ export class NotionService {
         page_size: 100, // Notion API의 최대 페이지 크기
       });
 
-      console.log(response);
       return response;
     } catch (error) {
       console.error('Notion 데이터베이스 조회 중 오류 발생:', error);
@@ -72,5 +71,62 @@ export class NotionService {
     }
 
     return allResults;
+  }
+
+  /**
+   * 리포트 데이터베이스에 새로운 페이지를 생성합니다
+   * @param title - 페이지 제목
+   * @param content - 페이지 내용
+   * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
+   * @returns 생성된 페이지 객체
+   */
+  async createReportPage(title: string, content: string, date: string) {
+    try {
+      const response = await notionClient.pages.create({
+        parent: {
+          database_id: this.reportDatabaseId,
+        },
+        icon: {
+          emoji: '📜',
+        },
+        properties: {
+          title: {
+            title: [
+              {
+                text: {
+                  content: title,
+                },
+              },
+            ],
+          },
+          Date: {
+            date: {
+              start: date,
+            },
+          },
+        },
+        children: [
+          {
+            object: 'block',
+            type: 'paragraph',
+            paragraph: {
+              rich_text: [
+                {
+                  type: 'text',
+                  text: {
+                    content: content,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      return response;
+    } catch (error) {
+      console.error('리포트 페이지 생성 중 오류 발생:', error);
+      throw error;
+    }
   }
 }
