@@ -1,6 +1,7 @@
 import { SchedulerService } from './services/scheduler';
 import { ReportService } from './services/report';
 import { NotionService } from './services/notionClient';
+import { getToday } from './utils/dateUtils';
 
 async function main() {
   try {
@@ -8,7 +9,7 @@ async function main() {
     const notionService = new NotionService();
 
     // 오늘 날짜 가져오기
-    const today = new Date().toISOString().split('T')[0];
+    const today = getToday();
 
     // 특정 날짜의 포맷된 보고서 데이터 조회
     const formattedReports = await reportService.getFormattedDailyReports(

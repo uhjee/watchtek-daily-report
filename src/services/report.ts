@@ -6,7 +6,7 @@ import {
   PartialPageObjectResponse,
   QueryDatabaseParameters,
 } from '@notionhq/client/build/src/api-endpoints';
-import { getNextDay } from '../utils/dateUtils';
+import { getToday, getNextDay } from '../utils/dateUtils';
 import {
   DailyReport,
   DailyReportItem,
@@ -121,8 +121,8 @@ export class ReportService {
         start: report.properties.Date.date?.start || '',
         end: report.properties.Date.date?.end || null,
       },
-      isToday: report.properties.isToday.formula.boolean || false,
-      isTomorrow: report.properties.isTomorrow.formula.boolean || false,
+      isToday: report.properties.isToday.formula['boolean'] || false,
+      isTomorrow: report.properties.isTomorrow.formula['boolean'] || false,
     }));
   }
 
@@ -141,7 +141,7 @@ export class ReportService {
    * @returns 최종 포맷의 일일 보고서 데이터
    */
   private convertToFinalFormat(reports: DailyReport[]): DailyReportGroup[] {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getToday();
 
     // 1. isToday/isTomorrow로 먼저 그룹핑
     const todayReports = reports.filter((report) => report.isToday);
