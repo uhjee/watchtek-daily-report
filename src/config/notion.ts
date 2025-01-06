@@ -1,12 +1,10 @@
 import { Client } from '@notionhq/client';
-import dotenv from 'dotenv';
+import { config } from './config';
 
-dotenv.config();
-
-if (!process.env.NOTION_API_KEY) {
+if (!config.notion.apiKey) {
   throw new Error('NOTION_API_KEY is not defined in environment variables');
 }
 
 export const notionClient = new Client({
-  auth: process.env.NOTION_API_KEY
+  auth: config.notion.apiKey
 }); 

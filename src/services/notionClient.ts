@@ -3,21 +3,19 @@ import {
   QueryDatabaseParameters,
   QueryDatabaseResponse,
 } from '@notionhq/client/build/src/api-endpoints';
+import { config } from '../config/config';
 
 export class NotionService {
   private databaseId: string;
   private reportDatabaseId: string;
 
   constructor() {
-    if (
-      !process.env.NOTION_DATABASE_ID ||
-      !process.env.NOTION_REPORT_DATABASE_ID
-    ) {
+    if (!config.notion.databaseId || !config.notion.reportDatabaseId) {
       throw new Error('Database IDs are not defined in environment variables');
     }
 
-    this.databaseId = process.env.NOTION_DATABASE_ID;
-    this.reportDatabaseId = process.env.NOTION_REPORT_DATABASE_ID;
+    this.databaseId = config.notion.databaseId;
+    this.reportDatabaseId = config.notion.reportDatabaseId;
   }
 
   /**

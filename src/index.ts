@@ -27,13 +27,18 @@ async function main() {
     } else {
       console.log('보고서 저장 실패');
     }
-
-    // console.dir(formattedReports, { depth: 8 });
   } catch (error) {
     console.error('Error:', error);
   }
 }
 
+// 프로그램 시작
+console.log('프로그램을 시작합니다...');
+
 // 스케줄러 시작
 const scheduler = new SchedulerService();
 scheduler.scheduleDaily(main);
+
+// 시작 메시지 출력
+console.log('프로그램이 백그라운드에서 실행 중입니다.');
+console.log('종료하려면 Ctrl+C를 누르세요.');
