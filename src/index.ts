@@ -16,16 +16,22 @@ async function main() {
       today,
     );
 
-    // formattedReports의 title과 text를 사용하여 Notion에 저장
-    const { id } = await notionService.createReportPage(
-      formattedReports.title,
-      formattedReports.text,
-      today,
-    );
-    if (id) {
-      console.log('보고서가 성공적으로 Notion에 저장되었습니다.');
+    // null 체크 추가 (휴일인 경우)
+    if (formattedReports) {
+      // formattedReports의 title과 text를 사용하여 Notion에 저장
+      const { id } = await notionService.createReportPage(
+        formattedReports.title,
+        formattedReports.text,
+        formattedReports.manDayText,
+        today,
+      );
+      if (id) {
+        console.log('보고서가 성공적으로 Notion에 저장되었습니다.');
+      } else {
+        console.log('보고서 저장 실패');
+      }
     } else {
-      console.log('보고서 저장 실패');
+      console.log('오늘은 휴일이므로 보고서가 생성되지 않았습니다.');
     }
   } catch (error) {
     console.error('Error:', error);
@@ -35,8 +41,8 @@ async function main() {
 // 프로그램 시작
 console.log('프로그램을 시작합니다...');
 
-// 스케줄러 시작
-const scheduler = new SchedulerService();
+// 스케줄러 시작 (false: 휴일에는 실행하지 않음)
+const scheduler = new SchedulerService(false);
 scheduler.scheduleDaily(main);
 
 // 시작 메시지 출력

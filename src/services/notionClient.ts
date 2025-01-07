@@ -78,7 +78,12 @@ export class NotionService {
    * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
    * @returns 생성된 페이지 객체
    */
-  async createReportPage(title: string, content: string, date: string) {
+  async createReportPage(
+    title: string,
+    content: string,
+    manDaySummary: string,
+    date: string,
+  ) {
     try {
       const response = await notionClient.pages.create({
         parent: {
@@ -113,6 +118,20 @@ export class NotionService {
                   type: 'text',
                   text: {
                     content: content,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            object: 'block',
+            type: 'paragraph',
+            paragraph: {
+              rich_text: [
+                {
+                  type: 'text',
+                  text: {
+                    content: manDaySummary,
                   },
                 },
               ],

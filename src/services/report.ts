@@ -13,7 +13,9 @@ import {
   FormattedDailyReport,
   NotionPage,
   DailyReportGroup,
-  FinalReport,
+  DailySummary,
+  ReportForm,
+  ReportFormWithManDay,
 } from '../types/report';
 import memberMap from '../config/members';
 
@@ -30,18 +32,30 @@ export class ReportService {
    * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
    * @returns 포맷된 일일 보고서 데이터
    */
-  async getFormattedDailyReports(startDate: string, endDate?: string) {
+  async getFormattedDailyReports(
+    startDate: string,
+    endDate?: string,
+  ): Promise<ReportFormWithManDay> {
     // 1. 원본 데이터 조회
     const reports = await this.getDailyReports(startDate, endDate);
 
     // 2. 기본 데이터 포맷 변환
     const formattedReports = this.formatReportData(reports);
 
+    // 3. member별 manDay 집계
+    const manDaySummary = this.getManDaySummary(formattedReports);
+    const manDayText = this.stringifyManDayMap(manDaySummary);
+
     // 3. 최종 포맷으로 변환
     const groupedReports = this.convertToFinalFormat(formattedReports);
 
     // 4. 텍스트로 변환
-    return this.convertToText(groupedReports, startDate);
+    const { title, text } = this.stringifyToReportText(
+      groupedReports,
+      startDate,
+    );
+
+    return { title, text, manDayText };
   }
 
   /**
@@ -123,6 +137,7 @@ export class ReportService {
       },
       isToday: report.properties.isToday.formula['boolean'] || false,
       isTomorrow: report.properties.isTomorrow.formula['boolean'] || false,
+      manDay: report.properties.ManDay.number || 0,
     }));
   }
 
@@ -133,6 +148,20 @@ export class ReportService {
    */
   private getMemberName(email: string) {
     return memberMap[email] || email;
+  }
+
+  /**
+   * 멤버별 manDay 집계
+   * @param reports - 포맷된 일일 보고서 데이터
+   * @returns 멤버별 manDay 집계 데이터
+   */
+  private getManDaySummary(reports: DailyReport[]): DailySummary {
+    return reports
+      .filter((report) => report.isToday)
+      .reduce((acc, report) => {
+        acc[report.person] = (acc[report.person] || 0) + report.manDay;
+        return acc;
+      }, {});
   }
 
   /**
@@ -287,10 +316,10 @@ export class ReportService {
    * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
    * @returns 텍스트로 변환된 보고서
    */
-  private convertToText(
+  private stringifyToReportText(
     reports: DailyReportGroup[],
     date: string,
-  ): FinalReport {
+  ): ReportForm {
     // 날짜 포맷 변환 (YYYY-MM-DD -> YY.MM.DD)
     const formattedDate = date.slice(2).replace(/-/g, '.');
 
@@ -333,5 +362,21 @@ export class ReportService {
     });
 
     return { title, text };
+  }
+
+  /**
+   * manDay 데이터를 포맷된 문자열로 변환합니다
+   * @param manDayData - 멤버별 공수 데이터
+   * @returns 포맷된 문자열
+   */
+  private stringifyManDayMap(manDayData: Record<string, number>): string {
+    let result = '[공수]\n';
+
+    // Object.entries()로 key-value 쌍을 배열로 변환하고 순회
+    Object.entries(manDayData).forEach(([name, value]) => {
+      result += `- ${name}: ${value} m/d\n`;
+    });
+
+    return result;
   }
 }

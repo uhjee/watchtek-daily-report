@@ -1,4 +1,4 @@
-export interface DailyReport {
+export interface DailyReportItem {
   title: string;
   customer: string;
   group: string;
@@ -13,19 +13,8 @@ export interface DailyReport {
   isTomorrow: boolean;
 }
 
-export interface DailyReportItem {
-  title: string;
-  customer: string;
-  group: string;
-  subGroup: string;
-  person: string;
-  progressRate: number;
-  date: {
-    start: string;
-    end: string | null;
-  };
-  isToday: boolean;
-  isTomorrow: boolean;
+export interface DailyReport extends DailyReportItem {
+  manDay: number;
 }
 
 export interface GroupedReportItem {
@@ -95,6 +84,9 @@ export interface NotionPage {
         boolean: boolean;
       };
     };
+    ManDay: {
+      number: number;
+    };
   };
 }
 
@@ -103,7 +95,15 @@ export interface DailyReportGroup {
   groups: FormattedDailyReport[];
 }
 
-export interface FinalReport {
+export interface ReportForm {
   title: string;
   text: string;
+}
+
+export interface ReportFormWithManDay extends ReportForm {
+  manDayText: string;
+}
+
+export interface DailySummary {
+  [key: string]: number;
 }
