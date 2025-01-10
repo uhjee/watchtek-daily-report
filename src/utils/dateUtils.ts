@@ -16,6 +16,7 @@ export function getToday(): string {
     .map((part) => part.trim().padStart(2, '0'));
 
   return `${year}-${month}-${day}`;
+  // return '2025-01-09';
 }
 
 /**

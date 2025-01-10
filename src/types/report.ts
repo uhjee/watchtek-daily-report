@@ -100,8 +100,9 @@ export interface ReportForm {
   text: string;
 }
 
-export interface ReportFormWithManDay extends ReportForm {
+export interface ReportData extends ReportForm {
   manDayText: string;
+  weeklyReport?: string;
 }
 
 export interface DailySummary {

@@ -12,7 +12,7 @@ async function main() {
     const today = getToday();
 
     // 특정 날짜의 포맷된 보고서 데이터 조회
-    const formattedReports = await reportService.getFormattedDailyReports(
+    const formattedReports = await reportService.getReportData(
       today,
     );
 

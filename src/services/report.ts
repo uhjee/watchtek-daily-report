@@ -15,7 +15,7 @@ import {
   DailyReportGroup,
   DailySummary,
   ReportForm,
-  ReportFormWithManDay,
+  ReportData,
 } from '../types/report';
 import memberMap from '../config/members';
 
@@ -32,18 +32,70 @@ export class ReportService {
    * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
    * @returns 포맷된 일일 보고서 데이터
    */
+  async getReportData(
+    startDate: string,
+    endDate?: string,
+  ): Promise<ReportData> {
+    const date = new Date(getToday());
+    console.log(date.getDay());
+
+    const dailyReport = await this.getFormattedDailyReports(startDate, endDate);
+    // 금요일이면 이번주 보고서 조회
+    if (date.getDay() === 5) {
+      const weeklyReport = await this.getWeeklyReportData(startDate, endDate);
+      return { ...dailyReport };
+    }
+    return dailyReport;
+  }
+
+  /**
+   * 이번 주 범위의 일일 보고서를 조회하고 포맷된 데이터를 반환합니다
+   * @param startDate - 시작 날짜 (YYYY-MM-DD 형식)
+   * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
+   * @returns 포맷된 일일 보고서 데이터
+   */
+  async getWeeklyReportData(startDate: string, endDate?: string) {
+    const reports = await this.getWeeklyReports();
+    const formattedReports = this.formatReportData(reports);
+    const manDaySummary = this.getManDaySummary(formattedReports);
+    // const manDayText = this.stringifyManDayMap(manDaySummary);
+    const weeklyManDaySummary = this.calculateWeeklyManDay(formattedReports);
+    console.dir(manDaySummary, { depth: 5 });
+    console.dir(weeklyManDaySummary, { depth: 5 });
+    // return { title, text, manDayText };
+    return;
+  }
+
+  /**
+   * 주간 보고서 manDay를 계산하는 함수
+   * 집계 기준: report.group
+   * 집계 결과: 각 그룹별 manDay 합계
+   */
+  private calculateWeeklyManDay(reports: DailyReport[]): DailySummary {
+    return reports.reduce((acc, report) => {
+      acc[report.group] = (acc[report.group] || 0) + report.manDay;
+      return acc;
+    }, {});
+  }
+
+  /**
+   * 특정 날짜 범위의 일일 보고서를 조회하고 포맷된 데이터를 반환합니다
+   * @param startDate - 시작 날짜 (YYYY-MM-DD 형식)
+   * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
+   * @returns 포맷된 일일 보고서 데이터
+   */
   async getFormattedDailyReports(
     startDate: string,
     endDate?: string,
-  ): Promise<ReportFormWithManDay> {
+  ): Promise<ReportData> {
     // 1. 원본 데이터 조회
-    const reports = await this.getDailyReports(startDate, endDate);
+    const reports = await this.getDailyReports(startDate);
 
     // 2. 기본 데이터 포맷 변환
     const formattedReports = this.formatReportData(reports);
 
     // 3. member별 manDay 집계
-    const manDaySummary = this.getManDaySummary(formattedReports);
+    const manDaySummary = this.getManDaySummary(formattedReports, true);
     const manDayText = this.stringifyManDayMap(manDaySummary);
 
     // 3. 최종 포맷으로 변환
@@ -64,10 +116,7 @@ export class ReportService {
    * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
    * @returns 일일 보고서 데이터
    */
-  async getDailyReports(startDate: string, endDate?: string) {
-    // endDate가 없을 경우 startDate + 1일로 설정
-    const calculatedEndDate = endDate || getNextDay(startDate);
-
+  async getDailyReports(startDate: string) {
     const filter = {
       and: [
         {
@@ -94,6 +143,46 @@ export class ReportService {
           property: 'Person',
           people: {
             is_not_empty: true,
+          },
+        },
+      ],
+    } as QueryDatabaseParameters['filter'];
+
+    const sorts = [
+      {
+        timestamp: 'created_time',
+        direction: 'descending',
+      },
+    ] as QueryDatabaseParameters['sorts'];
+
+    try {
+      // 전체 결과 조회
+      const results = await this.notionService.queryDatabaseAll(filter, sorts);
+      return results;
+    } catch (error) {
+      console.error('일일 보고서 조회 중 오류 발생:', error);
+      throw error;
+    }
+  }
+
+  /**
+   *이번 주 일일 보고서를 조회합니다
+   *
+   * @return  {[type]}  [return description]
+   */
+  async getWeeklyReports() {
+    const filter = {
+      and: [
+        {
+          property: 'Person',
+          people: {
+            is_not_empty: true,
+          },
+        },
+        {
+          property: 'Date',
+          date: {
+            this_week: {},
           },
         },
       ],
@@ -155,13 +244,19 @@ export class ReportService {
    * @param reports - 포맷된 일일 보고서 데이터
    * @returns 멤버별 manDay 집계 데이터
    */
-  private getManDaySummary(reports: DailyReport[]): DailySummary {
-    return reports
-      .filter((report) => report.isToday)
-      .reduce((acc, report) => {
-        acc[report.person] = (acc[report.person] || 0) + report.manDay;
-        return acc;
-      }, {});
+  private getManDaySummary(
+    reports: DailyReport[],
+    todayOnly: boolean = false,
+  ): DailySummary {
+    let filteredReports = reports;
+    if (todayOnly) {
+      filteredReports = filteredReports.filter((report) => report.isToday);
+    }
+
+    return filteredReports.reduce((acc, report) => {
+      acc[report.person] = (acc[report.person] || 0) + report.manDay;
+      return acc;
+    }, {});
   }
 
   /**
@@ -199,10 +294,15 @@ export class ReportService {
         report.date.start && report.group && report.subGroup && report.person,
     );
 
+    // console.dir(completeTodayReports, { depth: 5 });
     // 4. 진행중인 업무 중 마감일이 오늘이고 미완료된 업무는 예정업무로도 분류
     const additionalTomorrowReports = completeTodayReports.filter(
-      (report) => report.date.end === today && report.progressRate !== 100,
+      ({ date, progressRate }) =>
+        (date.end === today || (!date.end && date.start === today)) &&
+        progressRate < 100,
     );
+
+    // console.dir(additionalTomorrowReports, { depth: 5 });
 
     const allTomorrowReports = [
       ...tomorrowReports.filter(
