@@ -39,10 +39,10 @@ export class ReportService {
     const date = new Date(getToday());
     console.log(date.getDay());
 
-    const dailyReport = await this.getFormattedDailyReports(startDate, endDate);
+    const dailyReport = await this.getDailyReports(startDate, endDate);
     // 금요일이면 이번주 보고서 조회
     if (date.getDay() === 5) {
-      const weeklyReport = await this.getWeeklyReportData(startDate, endDate);
+      const weeklyReport = await this.getWeeklyReports(startDate, endDate);
       return { ...dailyReport };
     }
     return dailyReport;
@@ -54,8 +54,8 @@ export class ReportService {
    * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
    * @returns 포맷된 일일 보고서 데이터
    */
-  async getWeeklyReportData(startDate: string, endDate?: string) {
-    const reports = await this.getWeeklyReports();
+  async getWeeklyReports(startDate: string, endDate?: string) {
+    const reports = await this.getWeeklyReportsData();
     const formattedReports = this.formatReportData(reports);
     const manDaySummary = this.getManDaySummary(formattedReports);
     // const manDayText = this.stringifyManDayMap(manDaySummary);
@@ -84,12 +84,12 @@ export class ReportService {
    * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
    * @returns 포맷된 일일 보고서 데이터
    */
-  async getFormattedDailyReports(
+  async getDailyReports(
     startDate: string,
     endDate?: string,
   ): Promise<ReportData> {
     // 1. 원본 데이터 조회
-    const reports = await this.getDailyReports(startDate);
+    const reports = await this.getDailyReportsData(startDate);
 
     // 2. 기본 데이터 포맷 변환
     const formattedReports = this.formatReportData(reports);
@@ -99,10 +99,10 @@ export class ReportService {
     const manDayText = this.stringifyManDayMap(manDaySummary);
 
     // 3. 최종 포맷으로 변환
-    const groupedReports = this.convertToFinalFormat(formattedReports);
+    const groupedReports = this.formatDailyReports(formattedReports);
 
     // 4. 텍스트로 변환
-    const { title, text } = this.stringifyToReportText(
+    const { title, text } = this.stringifyDailyReports(
       groupedReports,
       startDate,
     );
@@ -116,7 +116,7 @@ export class ReportService {
    * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
    * @returns 일일 보고서 데이터
    */
-  async getDailyReports(startDate: string) {
+  async getDailyReportsData(startDate: string) {
     const filter = {
       and: [
         {
@@ -170,7 +170,7 @@ export class ReportService {
    *
    * @return  {[type]}  [return description]
    */
-  async getWeeklyReports() {
+  async getWeeklyReportsData() {
     const filter = {
       and: [
         {
@@ -264,7 +264,7 @@ export class ReportService {
    * @param reports - 기본 포맷의 일일 보고서 데이터
    * @returns 최종 포맷의 일일 보고서 데이터
    */
-  private convertToFinalFormat(reports: DailyReport[]): DailyReportGroup[] {
+  private formatDailyReports(reports: DailyReport[]): DailyReportGroup[] {
     const today = getToday();
 
     // 1. isToday/isTomorrow로 먼저 그룹핑
@@ -301,8 +301,6 @@ export class ReportService {
         (date.end === today || (!date.end && date.start === today)) &&
         progressRate < 100,
     );
-
-    // console.dir(additionalTomorrowReports, { depth: 5 });
 
     const allTomorrowReports = [
       ...tomorrowReports.filter(
@@ -416,7 +414,7 @@ export class ReportService {
    * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
    * @returns 텍스트로 변환된 보고서
    */
-  private stringifyToReportText(
+  private stringifyDailyReports(
     reports: DailyReportGroup[],
     date: string,
   ): ReportForm {
