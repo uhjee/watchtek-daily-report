@@ -72,16 +72,20 @@ export class NotionService {
     return allResults;
   }
 
+  /**
+   * 주어진 데이터가 주간 보고서 데이터인지 확인합니다
+   * @param data - 확인할 보고서 데이터
+   * @returns 주간 보고서 데이터 여부
+   */
   isWeeklyData(data: ReportDataForCreatePage): data is ReportWeeklyData {
     return 'manDayByGroupText' in data;
   }
 
   /**
    * 리포트 데이터베이스에 새로운 페이지를 생성합니다
-   * @param title - 페이지 제목
-   * @param content - 페이지 내용
+   * @param reportData - 생성할 보고서 데이터 (일일/주간)
    * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
-   * @returns 생성된 페이지 객체
+   * @returns 생성된 Notion 페이지
    */
   async createReportPage(reportData: ReportDataForCreatePage, date: string) {
     const { title, text, manDayText } = reportData;
@@ -96,7 +100,7 @@ export class NotionService {
           database_id: this.reportDatabaseId,
         },
         icon: {
-          emoji: '📜',
+          emoji: !!manDayByGroupText ? '🔶' : '📝',
         },
         properties: {
           title: {

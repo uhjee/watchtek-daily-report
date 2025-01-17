@@ -3,10 +3,10 @@ import { getWeekOfMonth } from '../utils/dateUtils';
 
 export class NotionStringifyService {
   /**
-   * 포맷된 보고서 데이터를 텍스트로 변환합니다
+   * 일일 보고서 데이터를 텍스트로 변환합니다
    * @param reports - 포맷된 보고서 데이터
    * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
-   * @returns 텍스트로 변환된 보고서
+   * @returns 제목과 내용이 포함된 보고서 텍스트
    */
   stringifyDailyReports(reports: DailyReportGroup[], date: string): ReportForm {
     // 날짜 포맷 변환 (YYYY-MM-DD -> YY.MM.DD)
@@ -70,9 +70,10 @@ export class NotionStringifyService {
   }
 
   /**
-   * manDay 데이터를 포맷된 문자열로 변환합니다
-   * @param manDayData - 멤버별 공수 데이터
-   * @returns 포맷된 문자열
+   * 공수 데이터를 포맷된 문자열로 변환합니다
+   * @param manDayData - 멤버별 또는 그룹별 공수 데이터
+   * @param isGroup - 그룹별 공수 여부
+   * @returns 포맷된 공수 문자열
    */
   stringifyManDayMap(manDayData: DailySummary, isGroup = false): string {
     let result = `[${isGroup ? '그룹별' : '인원별'} 공수]\n`;
@@ -94,7 +95,7 @@ export class NotionStringifyService {
    * 주간 보고서 데이터를 텍스트로 변환합니다
    * @param reports - 포맷된 보고서 데이터
    * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
-   * @returns 텍스트로 변환된 보고서
+   * @returns 제목과 내용이 포함된 주간 보고서 텍스트
    */
   stringifyWeeklyReports(
     reports: DailyReportGroup[],

@@ -433,7 +433,7 @@ export class ReportService {
     [a]: [string, DailyReport[]],
     [b]: [string, DailyReport[]],
   ): number {
-    const specialGroups = ['사이트 지원', 'OJT', '기타'];
+    const specialGroups = ['사이트 지원', '결함처리', 'OJT', '기타'];
     const aIndex = specialGroups.indexOf(a);
     const bIndex = specialGroups.indexOf(b);
 

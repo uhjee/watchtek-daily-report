@@ -11,28 +11,7 @@ export class SchedulerService {
   }
 
   /**
-   * 특정 날짜가 휴일인지 확인합니다
-   * @param date - 확인할 날짜
-   * @returns 휴일 여부
-   */
-  private isHoliday(date: Date): boolean {
-    // 주말 체크
-    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-
-    // 공휴일 체크 (양력 기준)
-    const isPublicHoliday = holiday.isHoliday(
-      date.getFullYear(),
-      date.getMonth() + 1,
-      date.getDate(),
-      false, // isLunar
-      false, // isLeapMonth
-    );
-
-    return isWeekend || isPublicHoliday;
-  }
-
-  /**
-   * 일일 작업을 스케줄링합니다
+   * 일일 작업을 스케줄링하고 실행합니다
    * @param job - 실행할 작업 함수
    */
   scheduleDaily(job: () => Promise<void>) {
@@ -75,7 +54,7 @@ export class SchedulerService {
   }
 
   /**
-   * 스케줄러를 정상적으로 종료합니다
+   * 스케줄러를 정상적으로 종료하고 프로세스를 종료합니다
    */
   private gracefulShutdown() {
     console.log('\n프로그램을 종료합니다...');
@@ -83,5 +62,26 @@ export class SchedulerService {
       this.task.stop();
     }
     process.exit(0);
+  }
+
+  /**
+   * 특정 날짜가 휴일(주말 또는 공휴일)인지 확인합니다
+   * @param date - 확인할 날짜
+   * @returns 휴일 여부
+   */
+  private isHoliday(date: Date): boolean {
+    // 주말 체크
+    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+
+    // 공휴일 체크 (양력 기준)
+    const isPublicHoliday = holiday.isHoliday(
+      date.getFullYear(),
+      date.getMonth() + 1,
+      date.getDate(),
+      false, // isLunar
+      false, // isLeapMonth
+    );
+
+    return isWeekend || isPublicHoliday;
   }
 }
