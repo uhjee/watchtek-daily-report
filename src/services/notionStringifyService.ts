@@ -103,7 +103,7 @@ export class NotionStringifyService {
     const weekOfMonth = getWeekOfMonth(date);
 
     // 헤더
-    const title = `큐브 파트 주간업무 보고 (${weekOfMonth})`;
+    const title = `${weekOfMonth} 큐브 파트 주간업무 보고`;
     let text = `${title}\n\n`;
 
     // 각 그룹(진행업무/예정업무)에 대해 처리
