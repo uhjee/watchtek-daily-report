@@ -1,7 +1,8 @@
 import { SchedulerService } from './services/scheduler';
-import { ReportService } from './services/report';
-import { NotionService } from './services/notionClient';
+import { ReportService } from './services/reportService';
+import { NotionService } from './services/notionService';
 import { getToday } from './utils/dateUtils';
+import { ReportDailyData, ReportWeeklyData } from './types/report';
 
 async function main() {
   try {
@@ -12,20 +13,22 @@ async function main() {
     const today = getToday();
 
     // 특정 날짜의 포맷된 보고서 데이터 조회
-    const formattedReports = await reportService.getReportData(
-      today,
-    );
+    const formattedReports = await reportService.getReportData(today);
 
     // null 체크 추가 (휴일인 경우)
     if (formattedReports) {
+      const createPagePromises = (
+        Object.entries(formattedReports) as [
+          string,
+          ReportDailyData | ReportWeeklyData,
+        ][]
+      ).map(([key, report]) => {
+        return notionService.createReportPage(report, today);
+      });
+      const result = await Promise.all(createPagePromises);
+
       // formattedReports의 title과 text를 사용하여 Notion에 저장
-      const { id } = await notionService.createReportPage(
-        formattedReports.title,
-        formattedReports.text,
-        formattedReports.manDayText,
-        today,
-      );
-      if (id) {
+      if (result.every((res) => res.id)) {
         console.log('보고서가 성공적으로 Notion에 저장되었습니다.');
       } else {
         console.log('보고서 저장 실패');

@@ -1,4 +1,4 @@
-import { NotionService } from './notionClient';
+import { NotionService } from './notionService';
 import {
   DatabaseObjectResponse,
   PageObjectResponse,
@@ -15,15 +15,20 @@ import {
   DailyReportGroup,
   DailySummary,
   ReportForm,
+  ReportDailyData,
+  ReportWeeklyData,
   ReportData,
 } from '../types/report';
 import memberMap from '../config/members';
+import { NotionStringifyService } from './notionStringifyService';
 
 export class ReportService {
   private notionService: NotionService;
+  private stringifyService: NotionStringifyService;
 
   constructor() {
     this.notionService = new NotionService();
+    this.stringifyService = new NotionStringifyService();
   }
 
   /**
@@ -40,12 +45,14 @@ export class ReportService {
     console.log(date.getDay());
 
     const dailyReport = await this.getDailyReports(startDate, endDate);
+    const result: ReportData = { dailyData: dailyReport };
+
     // 금요일이면 이번주 보고서 조회
     if (date.getDay() === 5) {
       const weeklyReport = await this.getWeeklyReports(startDate, endDate);
-      return { ...dailyReport };
+      result.weeklyData = weeklyReport;
     }
-    return dailyReport;
+    return result;
   }
 
   /**
@@ -54,16 +61,29 @@ export class ReportService {
    * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
    * @returns 포맷된 일일 보고서 데이터
    */
-  async getWeeklyReports(startDate: string, endDate?: string) {
+  async getWeeklyReports(
+    startDate: string,
+    endDate?: string,
+  ): Promise<ReportWeeklyData> {
     const reports = await this.getWeeklyReportsData();
     const formattedReports = this.formatReportData(reports);
-    const manDaySummary = this.getManDaySummary(formattedReports);
-    // const manDayText = this.stringifyManDayMap(manDaySummary);
-    const weeklyManDaySummary = this.calculateWeeklyManDay(formattedReports);
-    console.dir(manDaySummary, { depth: 5 });
-    console.dir(weeklyManDaySummary, { depth: 5 });
-    // return { title, text, manDayText };
-    return;
+    const groupedReports = this.formatWeeklyReports(formattedReports);
+
+    const { title, text } = this.stringifyService.stringifyWeeklyReports(
+      groupedReports,
+      startDate,
+    );
+    const weekLyManDaySummary = this.getManDaySummary(formattedReports);
+    const weeklyManDaySummaryByGroup =
+      this.calculateWeeklyManDay(formattedReports);
+    const manDayText =
+      this.stringifyService.stringifyManDayMap(weekLyManDaySummary);
+    const manDayByGroupText = this.stringifyService.stringifyManDayMap(
+      weeklyManDaySummaryByGroup,
+      true,
+    );
+
+    return { title, text, manDayText, manDayByGroupText };
   }
 
   /**
@@ -87,7 +107,7 @@ export class ReportService {
   async getDailyReports(
     startDate: string,
     endDate?: string,
-  ): Promise<ReportData> {
+  ): Promise<ReportDailyData> {
     // 1. 원본 데이터 조회
     const reports = await this.getDailyReportsData(startDate);
 
@@ -96,13 +116,13 @@ export class ReportService {
 
     // 3. member별 manDay 집계
     const manDaySummary = this.getManDaySummary(formattedReports, true);
-    const manDayText = this.stringifyManDayMap(manDaySummary);
+    const manDayText = this.stringifyService.stringifyManDayMap(manDaySummary);
 
-    // 3. 최종 포맷으로 변환
+    // 4. 최종 포맷으로 변환
     const groupedReports = this.formatDailyReports(formattedReports);
 
-    // 4. 텍스트로 변환
-    const { title, text } = this.stringifyDailyReports(
+    // 5. 텍스트로 변환
+    const { title, text } = this.stringifyService.stringifyDailyReports(
       groupedReports,
       startDate,
     );
@@ -265,6 +285,40 @@ export class ReportService {
    * @returns 최종 포맷의 일일 보고서 데이터
    */
   private formatDailyReports(reports: DailyReport[]): DailyReportGroup[] {
+    const {
+      completeTodayReports,
+      incompleteTodayReports,
+      allTomorrowReports,
+      incompleteTomorrowReports,
+    } = this.filterReportsByDay(reports);
+
+    return [
+      {
+        type: '진행업무',
+        groups: this.groupReports(completeTodayReports, incompleteTodayReports),
+      },
+      {
+        type: '예정업무',
+        groups: this.groupReports(
+          allTomorrowReports,
+          incompleteTomorrowReports,
+        ),
+      },
+    ];
+  }
+  private formatWeeklyReports(reports: DailyReport[]): DailyReportGroup[] {
+    return [
+      {
+        type: '진행업무',
+        groups: this.groupReports(reports, []),
+      },
+    ];
+  }
+
+  /**
+   * 일일 보고서를 날짜별로 필터링합니다
+   */
+  private filterReportsByDay(reports: DailyReport[]) {
     const today = getToday();
 
     // 1. isToday/isTomorrow로 먼저 그룹핑
@@ -272,29 +326,13 @@ export class ReportService {
     const tomorrowReports = reports.filter((report) => report.isTomorrow);
 
     // 2. 데이터가 부족한 항목들을 별도로 분류
-    const incompleteTodayReports = todayReports.filter(
-      (report) =>
-        !report.date.start ||
-        !report.group ||
-        !report.subGroup ||
-        !report.person,
-    );
-
-    const incompleteTomorrowReports = tomorrowReports.filter(
-      (report) =>
-        !report.date.start ||
-        !report.group ||
-        !report.subGroup ||
-        !report.person,
-    );
+    const incompleteTodayReports = this.filterIncompleteReports(todayReports);
+    const incompleteTomorrowReports =
+      this.filterIncompleteReports(tomorrowReports);
 
     // 3. 완전한 데이터만 필터링
-    const completeTodayReports = todayReports.filter(
-      (report) =>
-        report.date.start && report.group && report.subGroup && report.person,
-    );
+    const completeTodayReports = this.filterCompleteReports(todayReports);
 
-    // console.dir(completeTodayReports, { depth: 5 });
     // 4. 진행중인 업무 중 마감일이 오늘이고 미완료된 업무는 예정업무로도 분류
     const additionalTomorrowReports = completeTodayReports.filter(
       ({ date, progressRate }) =>
@@ -303,178 +341,191 @@ export class ReportService {
     );
 
     const allTomorrowReports = [
-      ...tomorrowReports.filter(
-        (report) =>
-          report.date.start && report.group && report.subGroup && report.person,
-      ),
+      ...this.filterCompleteReports(tomorrowReports),
       ...additionalTomorrowReports,
     ];
 
-    const formatGroup = (
-      reports: DailyReport[],
-      incompleteReports: DailyReport[],
-    ): FormattedDailyReport[] => {
-      // Group으로 먼저 그룹핑
-      const groupedByMain = new Map<string, DailyReport[]>();
-
-      reports.forEach((report) => {
-        if (!groupedByMain.has(report.group)) {
-          groupedByMain.set(report.group, []);
-        }
-        groupedByMain.get(report.group)?.push(report);
-      });
-
-      // 각 그룹 내에서 SubGroup으로 다시 그룹핑하고 정렬
-      const formattedGroups = Array.from(groupedByMain.entries())
-        .sort((a, b) => {
-          if (a[0] === '기타') return 1;
-          if (b[0] === '기타') return -1;
-          if (a[0] === '사이트 지원') return b[0] === '기타' ? -1 : 1;
-          if (b[0] === '사이트 지원') return a[0] === '기타' ? 1 : -1;
-          return a[0].localeCompare(b[0]);
-        })
-        .map(([group, items]) => {
-          const subGroupMap = new Map<string, DailyReportItem[]>();
-
-          items.forEach((item) => {
-            if (!subGroupMap.has(item.subGroup)) {
-              subGroupMap.set(item.subGroup, []);
-            }
-            subGroupMap.get(item.subGroup)?.push({
-              title: item.title,
-              customer: item.customer,
-              group: item.group,
-              subGroup: item.subGroup,
-              person: item.person,
-              progressRate: item.progressRate,
-              date: item.date,
-              isToday: item.isToday,
-              isTomorrow: item.isTomorrow,
-            });
-          });
-
-          const subGroupOrder = ['분석', '구현', '기타'];
-
-          return {
-            group,
-            subGroups: Array.from(subGroupMap.entries())
-              .sort((a, b) => {
-                const aIndex = subGroupOrder.indexOf(a[0]);
-                const bIndex = subGroupOrder.indexOf(b[0]);
-                return aIndex - bIndex;
-              })
-              .map(([subGroup, items]) => ({
-                subGroup,
-                items: items.sort((a, b) => b.progressRate - a.progressRate),
-              })),
-          };
-        });
-
-      // 불완전한 데이터를 '데이터 부족' 그룹으로 추가
-      if (incompleteReports.length > 0) {
-        formattedGroups.push({
-          group: '데이터 부족',
-          subGroups: [
-            {
-              subGroup: '-',
-              items: incompleteReports.map((report) => ({
-                title: report.title || '-',
-                customer: report.customer || '-',
-                group: report.group || '-',
-                subGroup: report.subGroup || '-',
-                person: report.person || '-',
-                progressRate: report.progressRate || 0,
-                date: report.date,
-                isToday: report.isToday,
-                isTomorrow: report.isTomorrow,
-              })),
-            },
-          ],
-        });
-      }
-
-      return formattedGroups;
+    return {
+      completeTodayReports,
+      incompleteTodayReports,
+      allTomorrowReports,
+      incompleteTomorrowReports,
     };
-
-    return [
-      {
-        type: '진행업무',
-        groups: formatGroup(completeTodayReports, incompleteTodayReports),
-      },
-      {
-        type: '예정업무',
-        groups: formatGroup(allTomorrowReports, incompleteTomorrowReports),
-      },
-    ];
   }
 
   /**
-   * 포맷된 보고서 데이터를 텍스트로 변환합니다
-   * @param reports - 포맷된 보고서 데이터
-   * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
-   * @returns 텍스트로 변환된 보고서
+   * 불완전한 보고서를 필터링합니다
    */
-  private stringifyDailyReports(
-    reports: DailyReportGroup[],
-    date: string,
-  ): ReportForm {
-    // 날짜 포맷 변환 (YYYY-MM-DD -> YY.MM.DD)
-    const formattedDate = date.slice(2).replace(/-/g, '.');
+  private filterIncompleteReports(reports: DailyReport[]): DailyReport[] {
+    return reports.filter(
+      (report) =>
+        !report.date.start ||
+        !report.group ||
+        !report.subGroup ||
+        !report.person,
+    );
+  }
 
-    // 헤더
-    const title = `큐브 파트 일일업무 보고 (${formattedDate})`;
-    let text = `${title}\n\n`;
+  /**
+   * 완전한 보고서를 필터링합니다
+   */
+  private filterCompleteReports(reports: DailyReport[]): DailyReport[] {
+    return reports.filter(
+      (report) =>
+        report.date.start && report.group && report.subGroup && report.person,
+    );
+  }
 
-    // 각 그룹(진행업무/예정업무)에 대해 처리
-    reports.forEach((reportGroup) => {
-      // 그룹 제목 추가
-      text += `[${reportGroup.type}]\n`;
+  /**
+   * 보고서를 그룹화하고 정렬합니다
+   */
+  private groupReports(
+    reports: DailyReport[],
+    incompleteReports: DailyReport[],
+  ): FormattedDailyReport[] {
+    // Group으로 먼저 그룹핑
+    const groupedByMain = this.groupByMainCategory(reports);
 
-      // 각 업무 그룹 처리
-      reportGroup.groups.forEach((group, groupIndex) => {
-        // Group 제목 (numbering 포함)
-        text += `${groupIndex + 1}. ${group.group}\n`;
+    // 각 그룹 내에서 SubGroup으로 다시 그룹핑하고 정렬
+    const formattedGroups = this.formatGroups(groupedByMain);
 
-        // SubGroup 처리
-        group.subGroups.forEach((subGroup) => {
-          // SubGroup 제목
-          text += `[${subGroup.subGroup}]\n`;
+    // 불완전한 데이터를 '데이터 부족' 그룹으로 추가
+    if (incompleteReports.length > 0) {
+      formattedGroups.push(this.createIncompleteGroup(incompleteReports));
+    }
 
-          // 각 항목 처리
-          subGroup.items.forEach((item) => {
-            // 고객사가 있는 경우 제목 앞에 추가
-            const title = item.customer
-              ? `[${item.customer}] ${item.title}`
-              : item.title;
+    return formattedGroups;
+  }
 
-            // 진행업무인 경우 진행률 포함, 예정업무인 경우 제외
-            const progress =
-              reportGroup.type === '진행업무' ? `, ${item.progressRate}%` : '';
+  /**
+   * 메인 카테고리별로 보고서를 그룹화합니다
+   */
+  private groupByMainCategory(
+    reports: DailyReport[],
+  ): Map<string, DailyReport[]> {
+    const groupedByMain = new Map<string, DailyReport[]>();
 
-            text += `- ${title}(${item.person}${progress})\n`;
-          });
-          text += '\n';
-        });
+    reports.forEach((report) => {
+      if (!groupedByMain.has(report.group)) {
+        groupedByMain.set(report.group, []);
+      }
+      groupedByMain.get(report.group)?.push(report);
+    });
+
+    return groupedByMain;
+  }
+
+  /**
+   * 그룹화된 보고서를 포맷팅합니다
+   */
+  private formatGroups(
+    groupedByMain: Map<string, DailyReport[]>,
+  ): FormattedDailyReport[] {
+    return Array.from(groupedByMain.entries())
+      .sort(this.sortGroups)
+      .map(([group, items]) => this.formatGroupItems(group, items));
+  }
+
+  /**
+   * 그룹 정렬 로직을 처리합니다
+   */
+  private sortGroups(
+    [a]: [string, DailyReport[]],
+    [b]: [string, DailyReport[]],
+  ): number {
+    const specialGroups = ['사이트 지원', 'OJT', '기타'];
+    const aIndex = specialGroups.indexOf(a);
+    const bIndex = specialGroups.indexOf(b);
+
+    // 둘 다 특수 그룹인 경우
+    if (aIndex !== -1 && bIndex !== -1) {
+      return aIndex - bIndex;
+    }
+
+    // a만 특수 그룹인 경우
+    if (aIndex !== -1) return 1;
+
+    // b만 특수 그룹인 경우
+    if (bIndex !== -1) return -1;
+
+    // 둘 다 일반 그룹인 경우 알파벳 순 정렬
+    return a.localeCompare(b);
+  }
+
+  /**
+   * 그룹 내 아이템들을 포맷팅합니다
+   */
+  private formatGroupItems(
+    group: string,
+    items: DailyReport[],
+  ): FormattedDailyReport {
+    const subGroupMap = new Map<string, DailyReportItem[]>();
+
+    items.forEach((item) => {
+      if (!subGroupMap.has(item.subGroup)) {
+        subGroupMap.set(item.subGroup, []);
+      }
+      subGroupMap.get(item.subGroup)?.push({
+        title: item.title,
+        customer: item.customer,
+        group: item.group,
+        subGroup: item.subGroup,
+        person: item.person,
+        progressRate: item.progressRate,
+        date: item.date,
+        isToday: item.isToday,
+        isTomorrow: item.isTomorrow,
       });
-      text += '\n';
     });
 
-    return { title, text };
+    return {
+      group,
+      subGroups: this.formatSubGroups(subGroupMap),
+    };
   }
 
   /**
-   * manDay 데이터를 포맷된 문자열로 변환합니다
-   * @param manDayData - 멤버별 공수 데이터
-   * @returns 포맷된 문자열
+   * 서브그룹을 포맷팅하고 정렬합니다
    */
-  private stringifyManDayMap(manDayData: Record<string, number>): string {
-    let result = '[공수]\n';
+  private formatSubGroups(subGroupMap: Map<string, DailyReportItem[]>) {
+    const subGroupOrder = ['분석', '구현', '기타'];
 
-    // Object.entries()로 key-value 쌍을 배열로 변환하고 순회
-    Object.entries(manDayData).forEach(([name, value]) => {
-      result += `- ${name}: ${value} m/d\n`;
-    });
+    return Array.from(subGroupMap.entries())
+      .sort((a, b) => {
+        const aIndex = subGroupOrder.indexOf(a[0]);
+        const bIndex = subGroupOrder.indexOf(b[0]);
+        return aIndex - bIndex;
+      })
+      .map(([subGroup, items]) => ({
+        subGroup,
+        items: items.sort((a, b) => b.progressRate - a.progressRate),
+      }));
+  }
 
-    return result;
+  /**
+   * 불완전한 데이터 그룹을 생성합니다
+   */
+  private createIncompleteGroup(
+    incompleteReports: DailyReport[],
+  ): FormattedDailyReport {
+    return {
+      group: '데이터 부족',
+      subGroups: [
+        {
+          subGroup: '-',
+          items: incompleteReports.map((report) => ({
+            title: report.title || '-',
+            customer: report.customer || '-',
+            group: report.group || '-',
+            subGroup: report.subGroup || '-',
+            person: report.person || '-',
+            progressRate: report.progressRate || 0,
+            date: report.date,
+            isToday: report.isToday,
+            isTomorrow: report.isTomorrow,
+          })),
+        },
+      ],
+    };
   }
 }

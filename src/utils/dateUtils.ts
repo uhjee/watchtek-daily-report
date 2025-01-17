@@ -40,3 +40,28 @@ export function getNextDay(date: string): string {
 
   return `${nextYear}-${nextMonth}-${nextDay}`;
 }
+
+/**
+ * 특정 날짜의 월과 주차 정보를 반환합니다
+ * @param dateString - YYYY-MM-DD 형식의 날짜 문자열
+ * @returns 'M월 N주차' 형식의 문자열
+ */
+export function getWeekOfMonth(dateString: string): string {
+  const date = new Date(dateString);
+  const month = date.getMonth() + 1; // getMonth()는 0부터 시작하므로 1을 더함
+
+  // 해당 월의 1일
+  const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+
+  // 1일의 요일 (0: 일요일, 1: 월요일, ..., 6: 토요일)
+  const firstDayWeekday = firstDayOfMonth.getDay();
+
+  // 입력된 날짜의 일자
+  const currentDate = date.getDate();
+
+  // 주차 계산
+  // (해당 일자 + 해당 월의 1일의 요일 - 1) / 7을 올림하여 주차를 구함
+  const weekNumber = Math.ceil((currentDate + firstDayWeekday) / 7);
+
+  return `${month}월 ${weekNumber}주차`;
+}

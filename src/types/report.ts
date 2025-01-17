@@ -100,10 +100,20 @@ export interface ReportForm {
   text: string;
 }
 
-export interface ReportData extends ReportForm {
+export interface ReportDailyData extends ReportForm {
   manDayText: string;
-  weeklyReport?: string;
 }
+
+export interface ReportWeeklyData extends ReportDailyData {
+  manDayByGroupText: string;
+}
+
+export interface ReportData {
+  dailyData: ReportDailyData;
+  weeklyData?: ReportWeeklyData;
+}
+
+export type ReportDataForCreatePage = ReportDailyData | ReportWeeklyData;
 
 export interface DailySummary {
   [key: string]: number;

@@ -4,6 +4,7 @@ import {
   QueryDatabaseResponse,
 } from '@notionhq/client/build/src/api-endpoints';
 import { config } from '../config/config';
+import { ReportDataForCreatePage, ReportWeeklyData } from '../types/report';
 
 export class NotionService {
   private databaseId: string;
@@ -71,6 +72,10 @@ export class NotionService {
     return allResults;
   }
 
+  isWeeklyData(data: ReportDataForCreatePage): data is ReportWeeklyData {
+    return 'manDayByGroupText' in data;
+  }
+
   /**
    * 리포트 데이터베이스에 새로운 페이지를 생성합니다
    * @param title - 페이지 제목
@@ -78,12 +83,13 @@ export class NotionService {
    * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
    * @returns 생성된 페이지 객체
    */
-  async createReportPage(
-    title: string,
-    content: string,
-    manDaySummary: string,
-    date: string,
-  ) {
+  async createReportPage(reportData: ReportDataForCreatePage, date: string) {
+    const { title, text, manDayText } = reportData;
+    let manDayByGroupText: string | null = null;
+    if (this.isWeeklyData(reportData)) {
+      manDayByGroupText = reportData.manDayByGroupText;
+    }
+
     try {
       const response = await notionClient.pages.create({
         parent: {
@@ -111,13 +117,29 @@ export class NotionService {
         children: [
           {
             object: 'block',
+            type: 'code',
+            code: {
+              rich_text: [
+                {
+                  type: 'text',
+
+                  text: {
+                    content: text,
+                  },
+                },
+              ],
+              language: 'javascript',
+            },
+          },
+          {
+            object: 'block',
             type: 'paragraph',
             paragraph: {
               rich_text: [
                 {
                   type: 'text',
                   text: {
-                    content: content,
+                    content: manDayText,
                   },
                 },
               ],
@@ -131,7 +153,7 @@ export class NotionService {
                 {
                   type: 'text',
                   text: {
-                    content: manDaySummary,
+                    content: manDayByGroupText ?? '',
                   },
                 },
               ],
