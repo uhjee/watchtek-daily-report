@@ -19,7 +19,7 @@ export interface DailyReport extends DailyReportItem {
 
 export interface GroupedReportItem {
   subGroup: string;
-  items: DailyReportItem[];
+  items: DailyReport[];
 }
 
 export interface FormattedDailyReport {
@@ -106,6 +106,7 @@ export interface ReportDailyData extends ReportForm {
 
 export interface ReportWeeklyData extends ReportDailyData {
   manDayByGroupText: string;
+  manDayByPersonText: string;
 }
 
 export interface ReportData {
@@ -115,6 +116,12 @@ export interface ReportData {
 
 export type ReportDataForCreatePage = ReportDailyData | ReportWeeklyData;
 
-export interface DailySummary {
+export interface ManDayByPerson {
   [key: string]: number;
+}
+
+export interface ManDayByPersonWithReports {
+  name: string;
+  totalManDay: number;
+  reports: DailyReport[];
 }

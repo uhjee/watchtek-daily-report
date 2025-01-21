@@ -13,26 +13,30 @@ import {
   FormattedDailyReport,
   NotionPage,
   DailyReportGroup,
-  DailySummary,
+  ManDayByPerson,
   ReportForm,
   ReportDailyData,
   ReportWeeklyData,
   ReportData,
+  ManDayByPersonWithReports,
 } from '../types/report';
 import memberMap from '../config/members';
 import { NotionStringifyService } from './notionStringifyService';
+import { MemberService } from './memberService';
 
 export class ReportService {
   private notionService: NotionService;
   private stringifyService: NotionStringifyService;
+  private memberService: MemberService;
 
   constructor() {
     this.notionService = new NotionService();
     this.stringifyService = new NotionStringifyService();
+    this.memberService = new MemberService();
   }
 
   /**
-   * 특정 날짜 범위의 일일 보고서를 조회하고 포맷된 데이터를 반환합니다
+   * 특정 날짜 범위의 일일 보고서를 조회하고 포맷된 데이터를 반환한다
    * @param startDate - 시작 날짜 (YYYY-MM-DD 형식)
    * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
    * @returns 포맷된 일일 보고서 데이터
@@ -42,7 +46,6 @@ export class ReportService {
     endDate?: string,
   ): Promise<ReportData> {
     const date = new Date(getToday());
-    console.log(date.getDay());
 
     const dailyReport = await this.getDailyReports(startDate, endDate);
     const result: ReportData = { dailyData: dailyReport };
@@ -69,6 +72,11 @@ export class ReportService {
     const formattedReports = this.formatReportData(reports);
     const groupedReports = this.formatWeeklyReports(formattedReports);
 
+    const manDayByPerson = this.getManDayByPerson(formattedReports);
+    console.dir(manDayByPerson, { depth: 5 });
+    const manDayByPersonText =
+      this.stringifyService.stringifyWeeklyManDayByPerson(manDayByPerson);
+
     const { title, text } = this.stringifyService.stringifyWeeklyReports(
       groupedReports,
       startDate,
@@ -83,7 +91,7 @@ export class ReportService {
       true,
     );
 
-    return { title, text, manDayText, manDayByGroupText };
+    return { title, text, manDayText, manDayByGroupText, manDayByPersonText };
   }
 
   /**
@@ -91,7 +99,7 @@ export class ReportService {
    * 집계 기준: report.group
    * 집계 결과: 각 그룹별 manDay 합계
    */
-  private calculateWeeklyManDay(reports: DailyReport[]): DailySummary {
+  private calculateWeeklyManDay(reports: DailyReport[]): ManDayByPerson {
     return reports.reduce((acc, report) => {
       acc[report.group] = (acc[report.group] || 0) + report.manDay;
       return acc;
@@ -236,7 +244,7 @@ export class ReportService {
       customer: report.properties.Customer.select?.name || '',
       group: report.properties.Group.select?.name || '',
       subGroup: report.properties.SubGroup.select?.name || '',
-      person: this.getMemberName(
+      person: this.memberService.getMemberName(
         report.properties.Person.people[0]?.person.email,
       ),
       progressRate: (report.properties.Progress.number || 0) * 100, // 0~100 사이의 값으로 변환
@@ -251,32 +259,43 @@ export class ReportService {
   }
 
   /**
-   * 특정 이메일에 해당하는 멤버 이름을 반환합니다
-   * @param email - 이메일 주소
-   * @returns 멤버 이름
-   */
-  private getMemberName(email: string) {
-    return memberMap[email] || email;
-  }
-
-  /**
-   * 멤버별 manDay 집계
-   * @param reports - 포맷된 일일 보고서 데이터
-   * @returns 멤버별 manDay 집계 데이터
+   * 보고서의 멤버별 공수를 계산하고 우선순위에 따라 정렬합니다
+   * @param reports - 일일 보고서 데이터 배열
+   * @param skipEmpty - 공수가 0인 멤버 제외 여부
+   * @returns 우선순위로 정렬된 [멤버이름, 공수] 배열
    */
   private getManDaySummary(
     reports: DailyReport[],
-    todayOnly: boolean = false,
-  ): DailySummary {
+    skipEmpty: boolean = false,
+  ): [string, number][] {
     let filteredReports = reports;
-    if (todayOnly) {
-      filteredReports = filteredReports.filter((report) => report.isToday);
+    if (skipEmpty) {
+      filteredReports = filteredReports.filter((report) => report.manDay > 0);
     }
 
-    return filteredReports.reduce((acc, report) => {
-      acc[report.person] = (acc[report.person] || 0) + report.manDay;
+    // 1. 멤버별 공수 합계 계산
+    const manDayMap = filteredReports.reduce((acc, report) => {
+      acc[report.person] = (acc[report.person] || 0) + (report.manDay || 0);
       return acc;
-    }, {});
+    }, {} as { [key: string]: number });
+
+    // 2. [멤버이름, 공수] 배열로 변환
+    const manDayEntries = Object.entries(manDayMap);
+
+    // 3. 멤버 우선순위에 따라 정렬
+    return manDayEntries.sort(([nameA], [nameB]) => {
+      const emailA = this.memberService.getEmailByName(nameA);
+      const emailB = this.memberService.getEmailByName(nameB);
+
+      const priorityA = this.memberService.getMemberPriority(emailA);
+      const priorityB = this.memberService.getMemberPriority(emailB);
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      return nameA.localeCompare(nameB);
+    });
   }
 
   /**
@@ -428,11 +447,16 @@ export class ReportService {
 
   /**
    * 그룹 정렬 로직을 처리합니다
+   * DCIM프로젝트 > 일반 그룹 > 특수 그룹 순으로 정렬
    */
   private sortGroups(
     [a]: [string, DailyReport[]],
     [b]: [string, DailyReport[]],
   ): number {
+    // DCIM프로젝트 우선 처리
+    if (a === 'DCIM프로젝트') return -1;
+    if (b === 'DCIM프로젝트') return 1;
+
     const specialGroups = ['사이트 지원', '결함처리', 'OJT', '기타'];
     const aIndex = specialGroups.indexOf(a);
     const bIndex = specialGroups.indexOf(b);
@@ -459,7 +483,7 @@ export class ReportService {
     group: string,
     items: DailyReport[],
   ): FormattedDailyReport {
-    const subGroupMap = new Map<string, DailyReportItem[]>();
+    const subGroupMap = new Map<string, DailyReport[]>();
 
     items.forEach((item) => {
       if (!subGroupMap.has(item.subGroup)) {
@@ -475,6 +499,7 @@ export class ReportService {
         date: item.date,
         isToday: item.isToday,
         isTomorrow: item.isTomorrow,
+        manDay: item.manDay ?? 0,
       });
     });
 
@@ -487,7 +512,7 @@ export class ReportService {
   /**
    * 서브그룹을 포맷팅하고 정렬합니다
    */
-  private formatSubGroups(subGroupMap: Map<string, DailyReportItem[]>) {
+  private formatSubGroups(subGroupMap: Map<string, DailyReport[]>) {
     const subGroupOrder = ['분석', '구현', '기타'];
 
     return Array.from(subGroupMap.entries())
@@ -519,13 +544,100 @@ export class ReportService {
             group: report.group || '-',
             subGroup: report.subGroup || '-',
             person: report.person || '-',
-            progressRate: report.progressRate || 0,
+            progressRate: report.progressRate ?? 0,
             date: report.date,
             isToday: report.isToday,
             isTomorrow: report.isTomorrow,
+            manDay: report.manDay ?? 0,
           })),
         },
       ],
     };
+  }
+
+  /**
+   * 보고서를 담당자별로 그룹화합니다
+   * @param reports - 일일 보고서 데이터 배열
+   * @returns 담당자별로 그룹화된 보고서 Map
+   */
+  private groupByPerson(reports: DailyReport[]): Map<string, DailyReport[]> {
+    const groupedByPerson = new Map<string, DailyReport[]>();
+
+    reports.forEach((report) => {
+      if (!groupedByPerson.has(report.person)) {
+        groupedByPerson.set(report.person, []);
+      }
+      groupedByPerson.get(report.person)?.push(report);
+    });
+
+    return groupedByPerson;
+  }
+
+  /**
+   * 담당자별로 그룹화된 보고서를 manDay 기준으로 정렬하고, 멤버 우선순위를 반영합니다
+   * @param groupedByPerson - 담당자별로 그룹화된 보고서 Map
+   * @returns 우선순위와 manDay로 정렬된 [담당자, 보고서[]] 배열
+   */
+  private sortGroupedReportsByManDay(
+    groupedByPerson: Map<string, DailyReport[]>,
+  ): [string, DailyReport[]][] {
+    // Map의 엔트리를 배열로 변환
+    const entries = Array.from(groupedByPerson.entries());
+
+    // 멤버 우선순위로 정렬
+    const sortedEntries = entries.sort(([personA], [personB]) => {
+      const priorityA =
+        memberMap[this.memberService.getEmailByName(personA)]?.priority ?? 999;
+      const priorityB =
+        memberMap[this.memberService.getEmailByName(personB)]?.priority ?? 999;
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      return personA.localeCompare(personB);
+    });
+
+    // 각 멤버의 보고서를 manDay 기준으로 정렬
+    return sortedEntries.map(([person, reports]) => [
+      person,
+      [...reports].sort((a, b) => {
+        const manDayA = a.manDay ?? 0;
+        const manDayB = b.manDay ?? 0;
+        return manDayB - manDayA;
+      }),
+    ]);
+  }
+
+  /**
+   * 담당자별 보고서 데이터에서 각 담당자의 총 공수를 계산합니다
+   * @param reportsByPerson - [담당자, 보고서[]] 형태의 배열
+   * @returns 담당자별 총 공수와 보고서 목록이 포함된 객체 배열
+   */
+  private accumulateSumManDayByPerson(
+    reportsByPerson: [string, DailyReport[]][],
+  ): ManDayByPersonWithReports[] {
+    return reportsByPerson.map(([person, reports]) => {
+      const sumManday = reports.reduce((sum, report) => {
+        sum += report.manDay;
+        return sum;
+      }, 0);
+      return {
+        name: person,
+        totalManDay: sumManday,
+        reports,
+      };
+    });
+  }
+
+  /**
+   * 보고서 데이터를 담당자별로 그룹화하고 manDay 기준으로 정렬합니다
+   * @param reports - 일일 보고서 데이터 배열
+   * @returns 담당자별로 그룹화되고 manDay 기준으로 정렬된 보고서 Map
+   */
+  private getManDayByPerson(reports: DailyReport[]) {
+    const groupedByPerson = this.groupByPerson(reports);
+    const sorted = this.sortGroupedReportsByManDay(groupedByPerson);
+    return this.accumulateSumManDayByPerson(sorted);
   }
 }

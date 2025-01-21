@@ -11,7 +11,7 @@ export class SchedulerService {
   }
 
   /**
-   * 일일 작업을 스케줄링하고 실행합니다
+   * 일일 작업을 스케줄링하고 실행한다
    * @param job - 실행할 작업 함수
    */
   scheduleDaily(job: () => Promise<void>) {
@@ -65,7 +65,7 @@ export class SchedulerService {
   }
 
   /**
-   * 특정 날짜가 휴일(주말 또는 공휴일)인지 확인합니다
+   * 특정 날짜가 휴일(주말 또는 공휴일)인지 확인한다
    * @param date - 확인할 날짜
    * @returns 휴일 여부
    */

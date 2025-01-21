@@ -20,7 +20,7 @@ export class NotionService {
   }
 
   /**
-   * Notion 데이터베이스를 조회하고 필터링된 결과를 반환합니다
+   * Notion 데이터베이스를 조회하고 필터링된 결과를 반환한다
    * @param filter - Notion API filter 객체
    * @param sorts - Notion API sort 객체 배열
    * @param startCursor - 페이지네이션을 위한 시작 커서
@@ -48,7 +48,7 @@ export class NotionService {
   }
 
   /**
-   * 모든 데이터베이스 결과를 페이지네이션하여 조회합니다
+   * 모든 데이터베이스 결과를 페이지네이션하여 조회한다
    * @param filter - Notion API filter 객체
    * @param sorts - Notion API sort 객체 배열
    * @returns 전체 데이터베이스 결과
@@ -73,7 +73,7 @@ export class NotionService {
   }
 
   /**
-   * 주어진 데이터가 주간 보고서 데이터인지 확인합니다
+   * 주어진 데이터가 주간 보고서 데이터인지 확인한다
    * @param data - 확인할 보고서 데이터
    * @returns 주간 보고서 데이터 여부
    */
@@ -82,94 +82,199 @@ export class NotionService {
   }
 
   /**
-   * 리포트 데이터베이스에 새로운 페이지를 생성합니다
+   * 리포트 데이터베이스에 새로운 페이지를 생성한다
    * @param reportData - 생성할 보고서 데이터 (일일/주간)
    * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
    * @returns 생성된 Notion 페이지
    */
   async createReportPage(reportData: ReportDataForCreatePage, date: string) {
     const { title, text, manDayText } = reportData;
-    let manDayByGroupText: string | null = null;
+
+    // 주간 보고서인 경우 추가 데이터 추가
+    let isWeeklyReport = false;
+    let manDayByGroupText: string = '';
+    let manDayByPersonText: string = '';
     if (this.isWeeklyData(reportData)) {
+      isWeeklyReport = true;
       manDayByGroupText = reportData.manDayByGroupText;
+      manDayByPersonText = reportData.manDayByPersonText;
     }
 
     try {
-      const response = await notionClient.pages.create({
-        parent: {
-          database_id: this.reportDatabaseId,
-        },
-        icon: {
-          emoji: !!manDayByGroupText ? '🔶' : '📝',
-        },
-        properties: {
-          title: {
-            title: [
-              {
-                text: {
-                  content: title,
-                },
-              },
-            ],
-          },
-          Date: {
-            date: {
-              start: date,
-            },
-          },
-        },
-        children: [
-          {
-            object: 'block',
-            type: 'code',
-            code: {
-              rich_text: [
-                {
-                  type: 'text',
-
-                  text: {
-                    content: text,
-                  },
-                },
-              ],
-              language: 'javascript',
-            },
-          },
-          {
-            object: 'block',
-            type: 'paragraph',
-            paragraph: {
-              rich_text: [
-                {
-                  type: 'text',
-                  text: {
-                    content: manDayText,
-                  },
-                },
-              ],
-            },
-          },
-          {
-            object: 'block',
-            type: 'paragraph',
-            paragraph: {
-              rich_text: [
-                {
-                  type: 'text',
-                  text: {
-                    content: manDayByGroupText ?? '',
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      });
+      const response = isWeeklyReport
+        ? await this.createWeeklyReportPage(
+            title,
+            date,
+            text,
+            manDayText,
+            manDayByGroupText,
+            manDayByPersonText,
+          )
+        : await this.createDailyReportPage(title, date, text, manDayText);
 
       return response;
     } catch (error) {
       console.error('리포트 페이지 생성 중 오류 발생:', error);
       throw error;
     }
+  }
+
+  createWeeklyReportPage(
+    title: string,
+    date: string,
+    text: string,
+    manDayText: string,
+    manDayByGroupText: string,
+    manDayByPersonText: string,
+  ) {
+    return notionClient.pages.create({
+      parent: {
+        database_id: this.reportDatabaseId,
+      },
+      icon: {
+        emoji: '🔶',
+      },
+      properties: {
+        title: {
+          title: [
+            {
+              text: {
+                content: title,
+              },
+            },
+          ],
+        },
+        Date: {
+          date: {
+            start: date,
+          },
+        },
+      },
+      children: [
+        {
+          object: 'block',
+          type: 'code',
+          code: {
+            rich_text: [
+              {
+                type: 'text',
+
+                text: {
+                  content: text,
+                },
+              },
+            ],
+            language: 'javascript',
+          },
+        },
+        {
+          object: 'block',
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              {
+                type: 'text',
+                text: {
+                  content: manDayText,
+                },
+              },
+            ],
+          },
+        },
+        {
+          object: 'block',
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              {
+                type: 'text',
+                text: {
+                  content: manDayByGroupText,
+                },
+              },
+            ],
+          },
+        },
+        {
+          object: 'block',
+          type: 'code',
+          code: {
+            rich_text: [
+              {
+                type: 'text',
+
+                text: {
+                  content: manDayByPersonText,
+                },
+              },
+            ],
+            language: 'javascript',
+          },
+        },
+      ],
+    });
+  }
+  createDailyReportPage(
+    title: string,
+    date: string,
+    text: string,
+    manDayText: string,
+  ) {
+    return notionClient.pages.create({
+      parent: {
+        database_id: this.reportDatabaseId,
+      },
+      icon: {
+        emoji: '📝',
+      },
+      properties: {
+        title: {
+          title: [
+            {
+              text: {
+                content: title,
+              },
+            },
+          ],
+        },
+        Date: {
+          date: {
+            start: date,
+          },
+        },
+      },
+      children: [
+        {
+          object: 'block',
+          type: 'code',
+          code: {
+            rich_text: [
+              {
+                type: 'text',
+
+                text: {
+                  content: text,
+                },
+              },
+            ],
+            language: 'javascript',
+          },
+        },
+        {
+          object: 'block',
+          type: 'paragraph',
+          paragraph: {
+            rich_text: [
+              {
+                type: 'text',
+                text: {
+                  content: manDayText,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
   }
 }

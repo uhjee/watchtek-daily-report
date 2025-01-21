@@ -1,374 +1,64 @@
-# watchtek 파트 일간 보고 notion 연동 프로그램
+# Watchtek 일일 및 주간 보고서 시스템
 
-## 프로젝트 개요
+## 개요
 
-- 프로젝트 명 : watchtek 파트 일간 보고 notion 연동 프로그램
-- 프로젝트 목적 : notion database에 입력된 파트원들의 일간보고를 자동으로 취합하는 프로그램
+Watchtek의 보고서 시스템은 Notion API를 활용하여 일일 및 주간 업무 보고서를 자동으로 생성하고 관리한다. 이 문서는 시스템의 기능, 변환 로직, 및 보고서 양식에 대해 상세히 설명한다.
 
-## 프로젝트 환경
+## 실행 방법
 
-- 프로젝트 언어: Typescript
-- 프로젝트 라이브러리: Node.js, Notion API
+1. 실행 파일과 함께 제공되는 `.env` 파일을 같은 디렉토리에 위치시킨다.
+2. `.env` 파일에 필요한 설정을 입력한다:
 
-## 프로젝트 기능
+   ```env
+   # Notion API Configuration
+   NOTION_API_KEY="secret_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   NOTION_DATABASE_ID="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   NOTION_REPORT_DATABASE_ID="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-- 주요 기능
+   # Scheduler Configuration
+   CRON_SCHEDULE="45 17 * * *" # 매일 17:45 실행
+   INCLUDE_HOLIDAY=false
 
-  1. notion API를 활용해서 notion database 데이터 조회
-  2. 1단계를 통해 조회한 데이터를 일간 보고 포맷으로 변환
-  3. 2단계를 통해 변환된 데이터를 다시 notion database에 업데이트
+   # Member Configuration
+   MEMBERS='{
+     "1033057@hansung.ac.kr": { "name": "허지행", "priority": 1 },
+     "janga782@watchtek.co.kr": { "name": "장민호", "priority": 2 },
+     "ldyydl@inu.ac.kr": { "name": "이동엽", "priority": 3 },
+     "hwan3921@naver.com": { "name": "장성환", "priority": 4 },
+     "rlatjfgml6471@gmail.com": { "name": "김설희", "priority": 5 }
+   }'
+   ```
 
-- 추가 기능
-  1. 위의 로직을 매일 특정 시간마다 수행
+3. `watchtek-daily-report.exe` 파일을 실행한다.
 
-## 프로젝트 구조
+## 주의사항
 
-- notion API 연동: notionClient.ts
-- 보고서: report.ts
-  - 보고서 조회: getReport()
-  - 보고서 포맷 변환: formatReport()
-  - 취합 보고서 생성: createDailyReport()
+- `.env` 파일과 `members.ts` 파일이 누락될 경우 시스템이 정상적으로 동작하지 않는다.
+- `members.ts` 파일의 이메일 주소는 Notion 데이터베이스에서 사용하는 계정의 이메일과 정확히 일치해야 한다.
+- `CRON_SCHEDULE`은 cron 표현식 형식을 따른다. 기본값은 매일 17:45에 실행된다.
 
-## notion 응답 데이터 example
+## 보고서 유형
 
-```json
-{
-  "object": "list",
-  "results": [
-    {
-      "object": "page",
-      "id": "f068466f-f5cc-4cec-81b0-6bb9d42a29dc",
-      "created_time": "2024-12-31T08:00:00.000Z",
-      "last_edited_time": "2025-01-02T07:30:00.000Z",
-      "created_by": {
-        "object": "user",
-        "id": "2461e8f5-c83a-446e-9490-269290a9623b"
-      },
-      "last_edited_by": {
-        "object": "user",
-        "id": "b30e009d-cf84-403b-b63d-4cc0039d8a2c"
-      },
-      "cover": null,
-      "icon": {
-        "type": "emoji",
-        "emoji": "🟢"
-      },
-      "parent": {
-        "type": "database_id",
-        "database_id": "13a9e358-6c4e-80b4-b95c-ef6dc2fad4da"
-      },
-      "archived": false,
-      "in_trash": false,
-      "properties": {
-        "Person": {
-          "id": "GVB%7D",
-          "type": "people",
-          "people": [
-            {
-              "object": "user",
-              "id": "2461e8f5-c83a-446e-9490-269290a9623b",
-              "name": "사람 A",
-              "avatar_url": null,
-              "type": "person",
-              "person": {
-                "email": "aaaaas@gmail.com"
-              }
-            }
-          ]
-        },
-        "Group": {
-          "id": "K%5Dua",
-          "type": "select",
-          "select": {
-            "id": "f2f63938-935b-4cf0-ac19-27c26264138e",
-            "name": "사이트 지원",
-            "color": "default"
-          }
-        },
-        "Customer": {
-          "id": "Tx%3E%5B",
-          "type": "select",
-          "select": {
-            "id": "7454103d-8078-4618-8469-6c1928d7441e",
-            "name": "나이스홀딩스",
-            "color": "yellow"
-          }
-        },
-        "SubGroup": {
-          "id": "WR%5CU",
-          "type": "select",
-          "select": {
-            "id": "6df3ac79-9a28-41d6-a1e2-84831cea9746",
-            "name": "구현",
-            "color": "purple"
-          }
-        },
-        "Progress": {
-          "id": "fUK%7D",
-          "type": "number",
-          "number": 0.2
-        },
-        "Date": {
-          "id": "yd%5CA",
-          "type": "date",
-          "date": {
-            "start": "2024-12-31",
-            "end": "2025-01-03",
-            "time_zone": null
-          }
-        },
-        "Name": {
-          "id": "title",
-          "type": "title",
-          "title": [
-            {
-              "type": "text",
-              "text": {
-                "content": "성능/운영 자원 매핑(김설희)",
-                "link": null
-              },
-              "annotations": {
-                "bold": false,
-                "italic": false,
-                "strikethrough": false,
-                "underline": false,
-                "code": false,
-                "color": "default"
-              },
-              "plain_text": "성능/운영 자원 매핑(김설희)",
-              "href": null
-            }
-          ]
-        }
-      },
-      "url": "https://www.notion.so/f068466ff5cc4cec81b06bb9d42a29dc",
-      "public_url": null
-    },
-    {
-      "object": "page",
-      "id": "745f535b-e299-401a-a14e-5ca0e7591563",
-      "created_time": "2024-12-31T06:22:00.000Z",
-      "last_edited_time": "2025-01-02T07:31:00.000Z",
-      "created_by": {
-        "object": "user",
-        "id": "a4ec1b96-c9c6-4a4e-b43d-4ede0f0a1f3c"
-      },
-      "last_edited_by": {
-        "object": "user",
-        "id": "b30e009d-cf84-403b-b63d-4cc0039d8a2c"
-      },
-      "cover": null,
-      "icon": null,
-      "parent": {
-        "type": "database_id",
-        "database_id": "13a9e358-6c4e-80b4-b95c-ef6dc2fad4da"
-      },
-      "archived": false,
-      "in_trash": false,
-      "properties": {
-        "Person": {
-          "id": "GVB%7D",
-          "type": "people",
-          "people": [
-            {
-              "object": "user",
-              "id": "a4ec1b96-c9c6-4a4e-b43d-4ede0f0a1f3c",
-              "name": "사람 B",
-              "avatar_url": null,
-              "type": "person",
-              "person": {
-                "email": "bbbbbb@gmail.com"
-              }
-            }
-          ]
-        },
-        "Group": {
-          "id": "K%5Dua",
-          "type": "select",
-          "select": {
-            "id": "f2f63938-935b-4cf0-ac19-27c26264138e",
-            "name": "사이트 지원",
-            "color": "default"
-          }
-        },
-        "Customer": {
-          "id": "Tx%3E%5B",
-          "type": "select",
-          "select": {
-            "id": "7454103d-8078-4618-8469-6c1928d7441e",
-            "name": "나이스홀딩스",
-            "color": "yellow"
-          }
-        },
-        "SubGroup": {
-          "id": "WR%5CU",
-          "type": "select",
-          "select": {
-            "id": "6df3ac79-9a28-41d6-a1e2-84831cea9746",
-            "name": "구현",
-            "color": "purple"
-          }
-        },
-        "Progress": {
-          "id": "fUK%7D",
-          "type": "number",
-          "number": 0.5
-        },
-        "Date": {
-          "id": "yd%5CA",
-          "type": "date",
-          "date": {
-            "start": "2024-12-31",
-            "end": null,
-            "time_zone": null
-          }
-        },
-        "Name": {
-          "id": "title",
-          "type": "title",
-          "title": [
-            {
-              "type": "text",
-              "text": {
-                "content": "[나이스홀딩스] 커스텀대시보드 쿼리 전달",
-                "link": null
-              },
-              "annotations": {
-                "bold": false,
-                "italic": false,
-                "strikethrough": false,
-                "underline": false,
-                "code": false,
-                "color": "default"
-              },
-              "plain_text": "[나이스홀딩스] 커스텀대시보드 쿼리 전달",
-              "href": null
-            }
-          ]
-        }
-      },
-      "url": "https://www.notion.so/745f535be299401aa14e5ca0e7591563",
-      "public_url": null
-    },
-    {
-      "object": "page",
-      "id": "1659e358-6c4e-80b4-b4ea-d30d922a4c75",
-      "created_time": "2024-12-23T02:18:00.000Z",
-      "last_edited_time": "2024-12-23T02:18:00.000Z",
-      "created_by": {
-        "object": "user",
-        "id": "b30e009d-cf84-403b-b63d-4cc0039d8a2c"
-      },
-      "last_edited_by": {
-        "object": "user",
-        "id": "b30e009d-cf84-403b-b63d-4cc0039d8a2c"
-      },
-      "cover": null,
-      "icon": {
-        "type": "emoji",
-        "emoji": "🟥"
-      },
-      "parent": {
-        "type": "database_id",
-        "database_id": "13a9e358-6c4e-80b4-b95c-ef6dc2fad4da"
-      },
-      "archived": false,
-      "in_trash": false,
-      "properties": {
-        "Person": {
-          "id": "GVB%7D",
-          "type": "people",
-          "people": []
-        },
-        "Group": {
-          "id": "K%5Dua",
-          "type": "select",
-          "select": null
-        },
-        "Customer": {
-          "id": "Tx%3E%5B",
-          "type": "select",
-          "select": null
-        },
-        "SubGroup": {
-          "id": "WR%5CU",
-          "type": "select",
-          "select": null
-        },
-        "Progress": {
-          "id": "fUK%7D",
-          "type": "number",
-          "number": null
-        },
-        "Date": {
-          "id": "yd%5CA",
-          "type": "date",
-          "date": {
-            "start": "2025-01-01",
-            "end": null,
-            "time_zone": null
-          }
-        },
-        "Name": {
-          "id": "title",
-          "type": "title",
-          "title": [
-            {
-              "type": "text",
-              "text": {
-                "content": "신정",
-                "link": null
-              },
-              "annotations": {
-                "bold": false,
-                "italic": false,
-                "strikethrough": false,
-                "underline": false,
-                "code": false,
-                "color": "default"
-              },
-              "plain_text": "신정",
-              "href": null
-            }
-          ]
-        }
-      },
-      "url": "https://www.notion.so/1659e3586c4e80b4b4ead30d922a4c75",
-      "public_url": null
-    }
-  ],
-  "next_cursor": null,
-  "has_more": false,
-  "type": "page_or_database",
-  "page_or_database": {},
-  "developer_survey": "https://notionup.typeform.com/to/bllBsoI4?utm_source=postman",
-  "request_id": "3c96a89b-a815-4485-af70-10462e275a0c"
-}
-```
+### 1. 일간 보고서 (Daily Report)
 
-## 일간 보고 포맷으로 변환
+#### 변환 로직
 
-### 변환 로직
+1. Notion API를 통해 가져온 데이터를 포맷에 맞게 변환한다.
+2. 변환된 데이터를 `isToday` 속성이 `true`인 그룹과 `isTomorrow` 속성이 `true`인 그룹으로 분류한다.
+   - `isToday`가 `true`인 경우: `진행업무`
+   - `isTomorrow`가 `true`인 경우: `예정업무`
+   - `진행업무` 중 `date.end`가 오늘이고 `progressRate`가 100이 아닌 경우, 해당 업무를 `예정업무`로 추가 분류한다.
+3. 각 그룹 내에서 `Group` 속성 값에 따라 추가로 그룹화한다.
+   - 정렬 순서:
+     - `Group` 속성 값 오름차순
+     - `기타`는 마지막에 위치
+     - `사이트 지원`은 `기타` 바로 전에 위치
+4. 각 `Group` 내의 `SubGroup` 속성 값에 따라 다시 그룹화하고, 다음 순서로 정렬한다:
+   - `분석`, `구현`, `기타`
+5. 각 `SubGroup` 내의 업무를 `progressRate` 속성 값 내림차순으로 정렬한다.
+6. 만약 `date`, `group`, `subGroup`, `person` 속성값이 없는 경우, `Group` 이름을 `데이터 부족`으로 설정하고 가장 마지막에 배치한다.
 
-1. notion API를 통해 가져온 값들을 포맷에 맞게 변환
-2. 변환된 값들을 'isToday' 속성이 True인 그룹과 'isTomorrow' 속성이 True인 그룹으로 분류
-   - key: 'isToday' 속성 값이 true라면 '진행업무', 'isTomorrow' 속성 값이 true라면 '예정업무'
-   - value: 해당 요소들의 배열
-   - '진행업무'로 분류된 요소 중 date.end의 값이 '오늘'이고, progressRate가 100이 아닌 요소들은 '예정업무' 배열에 추가
-3. 2단계에서 생성된 Map의 값(배열)들을 순회하며, 'Group' 속성 값에 따라 groupBy 처리해서 Map으로 변경 (key: 'Group' 속성 값 / value: 해당 요소들의 배열)
-   - 정렬 순서: 'Group' 속성 값 오름차순 정렬
-     - 속성값이 '기타'인 경우 마지막에 위치
-     - 속성값이 '사이트 지원'인 경우 마지막 바로 전에 위치
-4. 3단계에서 생성된 Map의 값(배열)들을 순회하며 각 요소에 대해 아래 로직 수행
-   - 'SubGroup' 값으로 groupBy 처리해서 Map으로 변경 (key: 'SubGroup' 속성 값 / value: 해당 요소들의 배열)
-   - ['분석', '구현', '기타'] 순으로 정렬
-5. 4단계에서 생성된 Map의 값(배열)들을 순회하며 각 요소에 대해 아래 로직 수행
-    - 정렬 순서: 'progressRate' 속성 값 내림차순 정렬
-
-* date, group, subGroup, person 의 속성값이 없는 경우, 아래의 'Group'으로 groupBy 처리 후 Group 배열의 가장 끝에 추가 ('예정업무', '기타' 보다 최후순위에 정렬)
-    - Group 이름: '데이터 부족'
-
-### 일간 보고서 양식 example
+#### 일간 보고서 양식 예시
 
 ```text
 큐브 파트 일일업무 보고 (25.01.02)
@@ -381,12 +71,11 @@
 
 2. 사이트 지원
 [구현]
-- [고객사] 성능운영 자원 매핑(사람A, 70%)
-- [고객사] 성능운영 자원 매핑(사람B, 10%)
+- [고객사A] 성능운영 자원 매핑(사람A, 70%)
+- [고객사B] CDU 자원 추가 패치 배포(사람B, 10%)
 
 3. 기타
-- 출장: 사람C(나이스홀딩스, 01/02)
-
+- 출장: 사람C(고객사A, 01/02)
 
 [예정업무]
 1. DCIM 프로젝트
@@ -396,28 +85,138 @@
 
 2. 사이트 지원
 [구현]
-- [고객사] 성능운영 자원 매핑(사람 A)
-- [고객사] 성능운영 자원 매핑(사람 B)
+- [고객사A] 성능운영 자원 매핑(사람 A)
+- [고객사B] CDU 자원 추가 패치 배포(사람 B)
 ```
 
-### 양식 예시
+### 2. 주간 보고서 (Weekly Report)
+
+#### 변환 로직
+
+1. Notion API를 통해 이번 주의 보고서 데이터를 가져온다.
+2. 데이터를 포맷에 맞게 변환한다.
+3. 담당자별로 공수를 집계하고, 각 담당자의 총 공수와 보고서 목록을 계산한다.
+4. 공수를 기반으로 담당자별 보고서를 우선순위에 따라 정렬한다.
+5. 보고서 데이터를 주간 보고서 양식에 맞게 포맷팅한다.
+
+#### 주간 보고서 양식 예시
+
 ```text
-큐브 파트 일일업무 보고 (A)
+3 큐브 파트 주간업무 보고
 
-[진행업무]
-1. B
-[C]
-- D(E, F) // 형태로 모든 배열 요소 표현
+****금주 진행 사항****
+1. DCIM 프로젝트
+[분석]
+- 메뉴 구조 기획 - 대시보드(사람A, 70%)
+- 메뉴 구조 기획 - 대시보드(사람C, 50%)
 
-[예정업무]
-1. B
-[C]
-- D(E) // 형태로 모든 배열 요소 표현
+2. 사이트 지원
+[구현]
+- [고객사A] 성능운영 자원 매핑(사람A, 70%)
+- [고객사B] CDU 자원 추가 패치 배포(사람B, 10%)
+
+****차주 계획 사항****
+1. DCIM 프로젝트
+[분석]
+- 메뉴 구조 기획(사람A)
+- 메뉴 구조 기획(사람B)
+
+2. 사이트 지원
+[구현]
+- [고객사A] 성능운영 자원 매핑(사람 A)
+- [고객사B] CDU 자원 추가 패치 배포(사람 B)
 ```
 
-- A: 오늘 날짜를 'YY.MM.DD' 형식으로 표기
-- B: 'Group' 속성 값, Group 속성 값에 따라 분류 후, 앞에 numbering하며 숫자가 1씩 증가
-- c: 'SubGroup' 속성 값, SubGroup 속성 값에 따라 분류 후, 앞에 numbering하며 숫자가 1씩 증가
-- D: 'title' 속성 값
-- E: 'person' 속성 값
-- F: 'progressRate' 속성 값 + '%'
+## 주요 기능
+
+### 1. 보고서 데이터 조회
+
+- **일일 보고서 조회**
+
+  - 특정 날짜 범위 내의 일일 보고서를 조회하여 포맷된 데이터를 반환한다.
+  - 금요일(요일이 5인 경우)에는 이번 주의 주간 보고서를 추가로 조회한다.
+
+- **주간 보고서 조회**
+  - 이번 주의 모든 일일 보고서를 조회하여 주간 보고서 데이터를 생성한다.
+
+### 2. 데이터 포맷팅
+
+- **일일 보고서 데이터 포맷팅**
+
+  - Notion API로부터 받은 원본 데이터를 필터링 및 그룹화하여 보고서 형식에 맞게 변환한다.
+  - `진행업무`와 `예정업무`로 분류하고, 각 업무 그룹 및 세부 그룹별로 정렬한다.
+
+- **주간 보고서 데이터 포맷팅**
+  - 이번 주의 일일 보고서를 집계하여 주간 보고서 양식에 맞게 변환한다.
+  - 담당자별 공수를 계산하고, 우선순위에 따라 정렬된 보고서를 생성한다.
+
+### 3. 보고서 문자열 변환
+
+- **일일 보고서 문자열 변환**
+
+  - 포맷된 일일 보고서 데이터를 텍스트 형식으로 변환하여 Notion 페이지에 기록한다.
+
+- **주간 보고서 문자열 변환**
+  - 포맷된 주간 보고서 데이터를 텍스트 형식으로 변환하여 Notion 페이지에 기록한다.
+  - 주간 인원별 공수와 업무 내역을 별도로 포맷한다.
+
+### 4. 스케줄링
+
+- **일일 작업 스케줄링**
+  - 설정된 CRON 스케줄에 따라 일일 및 주간 보고서 생성을 자동으로 실행한다.
+  - 휴일 여부를 확인하여 필요 시 작업을 생략할 수 있다.
+
+## 기술 스택
+
+- **프레임워크 및 라이브러리**
+
+  - Typescript
+  - Node.js
+  - Webpack
+  - Notion API
+  - cron (node-cron)
+  - holiday-kr
+
+## 코드 구조
+
+- `src/services/`
+
+  - `reportService.ts`: 보고서 데이터를 조회하고 포맷팅하는 주요 서비스.
+  - `notionService.ts`: Notion API와의 연동을 담당하는 서비스.
+  - `notionStringifyService.ts`: 포맷된 데이터를 문자열로 변환하는 서비스.
+  - `memberService.ts`: 멤버 관련 데이터를 관리하는 서비스.
+  - `scheduler.ts`: 보고서 생성 작업을 스케줄링하는 서비스.
+
+- `src/config/`
+
+  - `members.ts`: 보고서에 포함될 멤버의 이름과 우선순위를 정의.
+  - `notion.ts`: Notion API 관련 설정.
+
+- `src/types/`
+  - `report.d.ts`: 보고서 관련 타입 정의.
+  - `holiday-kr.d.ts`: `holiday-kr` 모듈의 타입 정의.
+
+## 멤버 관리
+
+- `members.ts` 파일에서 멤버의 이메일 주소, 이름, 우선순위를 정의한다.
+- `MemberService`를 통해 멤버의 이름 조회, 우선순위 조회, 이름으로 이메일 조회 등의 기능을 제공한다.
+
+## 최적화 및 베스트 프랙티스
+
+- **모듈화 및 DRY 원칙 준수**
+
+  - 각 기능별로 서비스를 분리하여 유지보수성을 높였다.
+  - 코드 중복을 최소화하고 재사용성을 강화했다.
+
+- **성능 최적화**
+
+  - Notion API의 페이지 사이즈를 최대한 활용하여 효율적으로 데이터를 조회한다.
+  - 보고서 데이터는 메모리 내에서 효율적으로 집계 및 정렬된다.
+
+- **코드 스타일**
+  - 가독성을 높이기 위해 명확한 주석을 작성했다.
+  - 함수 및 메서드의 역할을 명확히 정의하고, 책임을 분리했다.
+
+## 결론
+
+이 시스템은 Watchtek의 일일 및 주간 업무 보고서를 자동화하여 효율적으로 관리할 수 있도록 설계되었다. Notion API와의 연동을 통해 실시간으로 데이터를 조회하고, 사용자 정의 포맷에 맞게 보고서를 생성한다. 모듈화된 서비스 구조와 철저한 코드 관리로 유지보수성과 확장성을 보장한다.

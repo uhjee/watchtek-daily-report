@@ -20,17 +20,19 @@
 
    ```typescript
    // src/config/members.ts
-   const memberMap: { [key: string]: string } = {
-     'user1@example.com': '홍길동',
-     'user2@example.com': '김철수',
-     'user3@example.com': '이영희',
+   const memberMap: { [key: string]: { name: string; priority: number } } = {
+     'user1@example.com': { name: '홍길동', priority: 1 },
+     'user2@example.com': { name: '김철수', priority: 2 },
+     'user3@example.com': { name: '이영희', priority: 3 },
    } as const;
 
    export default memberMap;
    ```
 
    - 키(key): Notion 사용자의 이메일 주소
-   - 값(value): 보고서에 표시될 이름
+   - 값(value): 
+     - name: 보고서에 표시될 이름
+     - priority: 멤버 우선순위 (낮은 숫자가 높은 우선순위)
 
 4. watchtek-daily-report.exe 파일을 실행합니다.
 
