@@ -14,7 +14,6 @@ import {
   NotionPage,
   DailyReportGroup,
   ManDayByPerson,
-  ReportForm,
   ReportDailyData,
   ReportWeeklyData,
   ReportData,
@@ -73,7 +72,6 @@ export class ReportService {
     const groupedReports = this.formatWeeklyReports(formattedReports);
 
     const manDayByPerson = this.getManDayByPerson(formattedReports);
-    console.dir(manDayByPerson, { depth: 5 });
     const manDayByPersonText =
       this.stringifyService.stringifyWeeklyManDayByPerson(manDayByPerson);
 
@@ -81,11 +79,11 @@ export class ReportService {
       groupedReports,
       startDate,
     );
-    const weekLyManDaySummary = this.getManDaySummary(formattedReports);
+    const weeklyManDaySummary = this.getManDaySummary(formattedReports);
     const weeklyManDaySummaryByGroup =
       this.calculateWeeklyManDay(formattedReports);
     const manDayText =
-      this.stringifyService.stringifyManDayMap(weekLyManDaySummary);
+      this.stringifyService.stringifyManDayMap(weeklyManDaySummary);
     const manDayByGroupText = this.stringifyService.stringifyManDayMap(
       weeklyManDaySummaryByGroup,
       true,
@@ -98,10 +96,13 @@ export class ReportService {
    * 주간 보고서 manDay를 계산하는 함수
    * 집계 기준: report.group
    * 집계 결과: 각 그룹별 manDay 합계
+   * @param   {DailyReport[]}   reports  [reports description]
+   
+   * @return  {ManDayByPerson}           [return description]
    */
   private calculateWeeklyManDay(reports: DailyReport[]): ManDayByPerson {
     return reports.reduce((acc, report) => {
-      acc[report.group] = (acc[report.group] || 0) + report.manDay;
+      acc[report.group] = (acc[report.group] ?? 0) + report.manDay;
       return acc;
     }, {});
   }
@@ -126,7 +127,7 @@ export class ReportService {
     const manDaySummary = this.getManDaySummary(formattedReports, true);
     const manDayText = this.stringifyService.stringifyManDayMap(manDaySummary);
 
-    // 4. 최종 포맷으로 변환
+    // 4. 보고서 포맷으로 변환
     const groupedReports = this.formatDailyReports(formattedReports);
 
     // 5. 텍스트로 변환
@@ -240,21 +241,22 @@ export class ReportService {
    */
   private formatReportData(reports: unknown[]): DailyReport[] {
     return (reports as NotionPage[]).map((report) => ({
-      title: report.properties.Name.title[0]?.plain_text || '',
-      customer: report.properties.Customer.select?.name || '',
-      group: report.properties.Group.select?.name || '',
-      subGroup: report.properties.SubGroup.select?.name || '',
+      title:
+        report.properties.Name.title.map((t) => t.plain_text).join('') ?? '',
+      customer: report.properties.Customer.select?.name ?? '',
+      group: report.properties.Group.select?.name ?? '',
+      subGroup: report.properties.SubGroup.select?.name ?? '',
       person: this.memberService.getMemberName(
         report.properties.Person.people[0]?.person.email,
       ),
-      progressRate: (report.properties.Progress.number || 0) * 100, // 0~100 사이의 값으로 변환
+      progressRate: (report.properties.Progress.number ?? 0) * 100, // 0~100 사이의 값으로 변환
       date: {
-        start: report.properties.Date.date?.start || '',
-        end: report.properties.Date.date?.end || null,
+        start: report.properties.Date.date?.start ?? '',
+        end: report.properties.Date.date?.end ?? null,
       },
-      isToday: report.properties.isToday.formula['boolean'] || false,
-      isTomorrow: report.properties.isTomorrow.formula['boolean'] || false,
-      manDay: report.properties.ManDay.number || 0,
+      isToday: report.properties.isToday.formula['boolean'] ?? false,
+      isTomorrow: report.properties.isTomorrow.formula['boolean'] ?? false,
+      manDay: report.properties.ManDay.number ?? 0,
     }));
   }
 
