@@ -14,6 +14,7 @@ async function main() {
 
     // 특정 날짜의 포맷된 보고서 데이터 조회
     const formattedReports = await reportService.getReportData(today);
+    // const formattedReports = await reportService.getReportData('2025-02-05');
 
     // null 체크 추가 (휴일인 경우)
     if (formattedReports) {

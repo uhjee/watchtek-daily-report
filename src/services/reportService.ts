@@ -1,11 +1,5 @@
 import { NotionService } from './notionService';
-import {
-  DatabaseObjectResponse,
-  PageObjectResponse,
-  PartialDatabaseObjectResponse,
-  PartialPageObjectResponse,
-  QueryDatabaseParameters,
-} from '@notionhq/client/build/src/api-endpoints';
+import { QueryDatabaseParameters } from '@notionhq/client/build/src/api-endpoints';
 import { getToday, getNextDay } from '../utils/dateUtils';
 import {
   DailyReport,
@@ -487,6 +481,7 @@ export class ReportService {
   ): FormattedDailyReport {
     const subGroupMap = new Map<string, DailyReport[]>();
 
+    // 서브그룹별로 아이템 그룹화
     items.forEach((item) => {
       if (!subGroupMap.has(item.subGroup)) {
         subGroupMap.set(item.subGroup, []);
@@ -503,6 +498,31 @@ export class ReportService {
         isTomorrow: item.isTomorrow,
         manDay: item.manDay ?? 0,
       });
+    });
+
+    // 각 서브그룹의 아이템들 정렬
+    subGroupMap.forEach((reports, subGroup) => {
+      const sortedReports = reports.sort((a, b) => {
+        // 1. progressRate 내림차순
+        if (a.progressRate !== b.progressRate) {
+          return b.progressRate - a.progressRate;
+        }
+
+        // 2. members priority 오름차순
+        const emailA = this.memberService.getEmailByName(a.person);
+        const emailB = this.memberService.getEmailByName(b.person);
+        const priorityA = memberMap[emailA]?.priority ?? 999;
+        const priorityB = memberMap[emailB]?.priority ?? 999;
+        
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB;
+        }
+
+        // 3. 이름 순 (같은 우선순위일 경우)
+        return a.person.localeCompare(b.person);
+      });
+
+      subGroupMap.set(subGroup, sortedReports);
     });
 
     return {
