@@ -33,10 +33,11 @@ export class NotionStringifyService {
         // Group 제목 (numbering 포함)
         text += `${groupIndex + 1}. ${group.group}\n`;
 
-        if (group.group === '사이트 지원') {
-          // 사이트 지원의 경우 모든 subGroup의 items를 하나로 합쳐서 처리
-          const allItems = group.subGroups.flatMap((sg) => sg.items);
-          allItems.forEach((item) => {
+        // 기존 로직 유지 (다른 그룹들은 subGroup 표시)
+        group.subGroups.forEach((subGroup) => {
+          text += `[${subGroup.subGroup}]\n`;
+
+          subGroup.items.forEach((item) => {
             const title = item.customer
               ? `[${item.customer}] ${item.title}`
               : item.title;
@@ -47,26 +48,7 @@ export class NotionStringifyService {
             text += `- ${title}(${item.person}${progress})\n`;
           });
           text += '\n';
-        } else {
-          // 기존 로직 유지 (다른 그룹들은 subGroup 표시)
-          group.subGroups.forEach((subGroup) => {
-            text += `[${subGroup.subGroup}]\n`;
-
-            subGroup.items.forEach((item) => {
-              const title = item.customer
-                ? `[${item.customer}] ${item.title}`
-                : item.title;
-
-              const progress =
-                reportGroup.type === '진행업무'
-                  ? `, ${item.progressRate}%`
-                  : '';
-
-              text += `- ${title}(${item.person}${progress})\n`;
-            });
-            text += '\n';
-          });
-        }
+        });
       });
       text += '\n';
     });
@@ -130,10 +112,11 @@ export class NotionStringifyService {
         // Group 제목 (numbering 포함)
         text += `${groupIndex + 1}. ${group.group}\n`;
 
-        if (group.group === '사이트 지원') {
-          // 사이트 지원의 경우 모든 subGroup의 items를 하나로 합쳐서 처리
-          const allItems = group.subGroups.flatMap((sg) => sg.items);
-          allItems.forEach((item) => {
+        // 기존 로직 유지 (다른 그룹들은 subGroup 표시)
+        group.subGroups.forEach((subGroup) => {
+          text += `[${subGroup.subGroup}]\n`;
+
+          subGroup.items.forEach((item) => {
             const title = item.customer
               ? `[${item.customer}] ${item.title}`
               : item.title;
@@ -144,26 +127,7 @@ export class NotionStringifyService {
             text += `- ${title}(${item.person}${progress})\n`;
           });
           text += '\n';
-        } else {
-          // 기존 로직 유지 (다른 그룹들은 subGroup 표시)
-          group.subGroups.forEach((subGroup) => {
-            text += `[${subGroup.subGroup}]\n`;
-
-            subGroup.items.forEach((item) => {
-              const title = item.customer
-                ? `[${item.customer}] ${item.title}`
-                : item.title;
-
-              const progress =
-                reportGroup.type === '진행업무'
-                  ? `, ${item.progressRate}%`
-                  : '';
-
-              text += `- ${title}(${item.person}${progress})\n`;
-            });
-            text += '\n';
-          });
-        }
+        });
       });
       text += '\n';
     });

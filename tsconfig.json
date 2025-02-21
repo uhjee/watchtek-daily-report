@@ -11,7 +11,13 @@
     "rootDir": "./src",
     "moduleResolution": "node",
     "noImplicitAny": false,
-    "sourceMap": true
+    "sourceMap": true,
+    "inlineSourceMap": false,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "*": ["node_modules/*", "src/types/*"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules"]

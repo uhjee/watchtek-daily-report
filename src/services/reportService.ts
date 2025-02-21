@@ -444,6 +444,7 @@ export class ReportService {
   /**
    * 그룹 정렬 로직을 처리합니다
    * DCIM프로젝트 > 일반 그룹 > 특수 그룹 순으로 정렬
+   * - 특수 그룹: 사이트 지원, 결함처리, OJT, 기타
    */
   private sortGroups(
     [a]: [string, DailyReport[]],
@@ -473,7 +474,34 @@ export class ReportService {
   }
 
   /**
+   * 보고서 항목을 정렬합니다
+   * 1. progressRate 내림차순
+   * 2. members priority 오름차순
+   * 3. 담당자 이름 사전순
+   */
+  private sortReportItems(a: DailyReport, b: DailyReport): number {
+    // 1. progressRate 내림차순
+    if (a.progressRate !== b.progressRate) {
+      return b.progressRate - a.progressRate;
+    }
+
+    // 2. members priority 오름차순
+    const emailA = this.memberService.getEmailByName(a.person);
+    const emailB = this.memberService.getEmailByName(b.person);
+    const priorityA = memberMap[emailA]?.priority ?? 999;
+    const priorityB = memberMap[emailB]?.priority ?? 999;
+
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+
+    // 3. 이름 순 (같은 우선순위일 경우)
+    return a.person.localeCompare(b.person);
+  }
+
+  /**
    * 그룹 내 아이템들을 포맷팅합니다
+   * ex) subGroup: '분석' 하위 아이템 포맷팅
    */
   private formatGroupItems(
     group: string,
@@ -481,12 +509,15 @@ export class ReportService {
   ): FormattedDailyReport {
     const subGroupMap = new Map<string, DailyReport[]>();
 
+    // 사이트 지원의 경우 customer로 그룹핑
+    const subGroupKey = group === '사이트 지원' ? 'customer' : 'subGroup';
+    
     // 서브그룹별로 아이템 그룹화
     items.forEach((item) => {
-      if (!subGroupMap.has(item.subGroup)) {
-        subGroupMap.set(item.subGroup, []);
+      if (!subGroupMap.has(item[subGroupKey])) {
+        subGroupMap.set(item[subGroupKey], []);
       }
-      subGroupMap.get(item.subGroup)?.push({
+      subGroupMap.get(item[subGroupKey])?.push({
         title: item.title,
         customer: item.customer,
         group: item.group,
@@ -502,26 +533,7 @@ export class ReportService {
 
     // 각 서브그룹의 아이템들 정렬
     subGroupMap.forEach((reports, subGroup) => {
-      const sortedReports = reports.sort((a, b) => {
-        // 1. progressRate 내림차순
-        if (a.progressRate !== b.progressRate) {
-          return b.progressRate - a.progressRate;
-        }
-
-        // 2. members priority 오름차순
-        const emailA = this.memberService.getEmailByName(a.person);
-        const emailB = this.memberService.getEmailByName(b.person);
-        const priorityA = memberMap[emailA]?.priority ?? 999;
-        const priorityB = memberMap[emailB]?.priority ?? 999;
-        
-        if (priorityA !== priorityB) {
-          return priorityA - priorityB;
-        }
-
-        // 3. 이름 순 (같은 우선순위일 경우)
-        return a.person.localeCompare(b.person);
-      });
-
+      const sortedReports = reports.sort(this.sortReportItems.bind(this));
       subGroupMap.set(subGroup, sortedReports);
     });
 
