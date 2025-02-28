@@ -1,6 +1,6 @@
 import { NotionService } from './notionService';
 import { QueryDatabaseParameters } from '@notionhq/client/build/src/api-endpoints';
-import { getToday, getNextDay } from '../utils/dateUtils';
+import { getToday, getNextDay, getCurrentMonthRange } from '../utils/dateUtils';
 import {
   DailyReport,
   DailyReportItem,
@@ -12,7 +12,8 @@ import {
   ReportWeeklyData,
   ReportData,
   ManDayByPersonWithReports,
-} from '../types/report';
+  ReportMonthlyData
+} from '../types/report.d';
 import memberMap from '../config/members';
 import { NotionStringifyService } from './notionStringifyService';
 import { MemberService } from './memberService';
@@ -39,16 +40,42 @@ export class ReportService {
     endDate?: string,
   ): Promise<ReportData> {
     const date = new Date(getToday());
+    const result: ReportData = {};
 
+    // 일일 보고서 조회
     const dailyReport = await this.getDailyReports(startDate, endDate);
-    const result: ReportData = { dailyData: dailyReport };
+    result.dailyData = dailyReport;
 
     // 금요일이면 이번주 보고서 조회
     if (date.getDay() === 5) {
       const weeklyReport = await this.getWeeklyReports(startDate, endDate);
       result.weeklyData = weeklyReport;
+
+      // 이번 달의 마지막 주 금요일인지 확인
+      if (this.isLastFridayOfMonth(date)) {
+        const monthlyReport = await this.getMonthlyReports(startDate, endDate);
+        result.monthlyData = monthlyReport;
+      }
     }
+
     return result;
+  }
+
+  /**
+   * 주어진 날짜가 해당 월의 마지막 주 금요일인지 확인한다
+   * @param date - 확인할 날짜
+   * @returns 마지막 주 금요일 여부
+   */
+  private isLastFridayOfMonth(date: Date): boolean {
+    // 현재 날짜가 금요일인지 확인 (이미 호출 전에 확인했지만 안전을 위해 재확인)
+    if (date.getDay() !== 5) return false;
+
+    // 다음 금요일의 날짜 계산
+    const nextFriday = new Date(date);
+    nextFriday.setDate(date.getDate() + 7);
+
+    // 다음 금요일이 다음 달에 속하는지 확인
+    return nextFriday.getMonth() !== date.getMonth();
   }
 
   /**
@@ -511,7 +538,7 @@ export class ReportService {
 
     // 사이트 지원의 경우 customer로 그룹핑
     const subGroupKey = group === '사이트 지원' ? 'customer' : 'subGroup';
-    
+
     // 서브그룹별로 아이템 그룹화
     items.forEach((item) => {
       if (!subGroupMap.has(item[subGroupKey])) {
@@ -673,5 +700,149 @@ export class ReportService {
     const groupedByPerson = this.groupByPerson(reports);
     const sorted = this.sortGroupedReportsByManDay(groupedByPerson);
     return this.accumulateSumManDayByPerson(sorted);
+  }
+
+  /**
+   * 이번 달의 일일 보고서를 조회하고 포맷된 데이터를 반환한다
+   * @param startDate - 시작 날짜 (YYYY-MM-DD 형식)
+   * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
+   * @returns 포맷된 월간 보고서 데이터
+   */
+  async getMonthlyReports(
+    startDate: string,
+    endDate?: string,
+  ): Promise<ReportMonthlyData> {
+    const reports = await this.getMonthlyReportsData();
+    const formattedReports = this.formatReportData(reports);
+    const groupedReports = this.formatMonthlyReports(formattedReports);
+
+    const manDayByPerson = this.getManDayByPerson(formattedReports);
+    const manDayByPersonTexts =
+      this.stringifyService.stringifyMonthlyManDayByPerson(manDayByPerson);
+
+    const { title, texts } = this.stringifyService.stringifyMonthlyReports(
+      groupedReports,
+      startDate,
+    );
+    const monthlyManDaySummary = this.getManDaySummary(formattedReports);
+    const monthlyManDaySummaryByGroup =
+      this.calculateMonthlyManDay(formattedReports);
+    const manDayText =
+      this.stringifyService.stringifyManDayMap(monthlyManDaySummary);
+    const manDayByGroupText = this.stringifyService.stringifyManDayMap(
+      monthlyManDaySummaryByGroup,
+      true,
+    );
+
+    return {
+      title,
+      texts,
+      manDayText,
+      manDayByGroupText,
+      manDayByPersonTexts,
+      isMonthlyReport: true,
+    };
+  }
+
+  /**
+   * 월간 보고서 manDay를 계산하는 함수
+   * 집계 기준: report.group
+   * 집계 결과: 각 그룹별 manDay 합계
+   * @param   {DailyReport[]}   reports  일일 보고서 데이터 배열
+   * @return  {ManDayByPerson}           그룹별 공수 합계
+   */
+  private calculateMonthlyManDay(reports: DailyReport[]): ManDayByPerson {
+    return reports.reduce((acc, report) => {
+      acc[report.group] = (acc[report.group] ?? 0) + report.manDay;
+      return acc;
+    }, {});
+  }
+
+  /**
+   * 이번 달의 일일 보고서를 조회한다
+   * @returns 이번 달의 일일 보고서 데이터
+   */
+  async getMonthlyReportsData() {
+    // 이번 달의 첫날과 마지막 날 가져오기
+    const { firstDay: firstDayStr, lastDay: lastDayStr } = getCurrentMonthRange();
+
+    const filter = {
+      and: [
+        {
+          property: 'Date',
+          date: {
+            on_or_after: firstDayStr,
+          },
+        },
+        {
+          property: 'Date',
+          date: {
+            on_or_before: lastDayStr,
+          },
+        },
+        {
+          property: 'Person',
+          people: {
+            is_not_empty: true,
+          },
+        },
+      ],
+    } as QueryDatabaseParameters['filter'];
+
+    const sorts = [
+      {
+        property: 'Date',
+        direction: 'ascending',
+      },
+    ] as QueryDatabaseParameters['sorts'];
+
+    try {
+      // 전체 결과 조회
+      const results = await this.notionService.queryDatabaseAll(filter, sorts);
+      return results;
+    } catch (error) {
+      console.error('월간 보고서 조회 중 오류 발생:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 월간 보고서 데이터를 포맷팅한다
+   * @param reports - 일일 보고서 데이터 배열
+   * @returns 포맷된 월간 보고서 데이터
+   */
+  private formatMonthlyReports(reports: DailyReport[]): DailyReportGroup[] {
+    // 진행업무와 예정업무로 분류
+    const progressReports = reports.filter(
+      (report) => report.progressRate > 0 && report.progressRate < 100,
+    );
+    const completedReports = reports.filter(
+      (report) => report.progressRate === 100,
+    );
+
+    // 각 그룹 포맷팅
+    const progressGroup = this.formatMonthlyReportGroup(progressReports, '진행업무');
+    const completedGroup = this.formatMonthlyReportGroup(completedReports, '완료업무');
+
+    return [progressGroup, completedGroup];
+  }
+
+  /**
+   * 보고서 그룹을 포맷팅한다
+   * @param reports - 보고서 데이터 배열
+   * @param type - 그룹 타입 ('진행업무' | '예정업무' | '완료업무')
+   * @returns 포맷된 보고서 그룹
+   */
+  private formatMonthlyReportGroup(
+    reports: DailyReport[],
+    type: '진행업무' | '예정업무' | '완료업무'
+  ): DailyReportGroup {
+    const groupedByMain = this.groupByMainCategory(reports);
+    const formattedGroups = this.formatGroups(groupedByMain);
+    
+    return {
+      type,
+      groups: formattedGroups,
+    };
   }
 }

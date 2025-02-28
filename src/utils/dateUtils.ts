@@ -65,3 +65,22 @@ export function getWeekOfMonth(dateString: string): string {
 
   return `${month}월 ${weekNumber}주차`;
 }
+
+/**
+ * 현재 달의 첫날과 마지막 날을 YYYY-MM-DD 형식으로 반환한다
+ * @returns {Object} 이번 달의 첫날과 마지막 날
+ */
+export function getCurrentMonthRange(): { firstDay: string; lastDay: string } {
+  const now = new Date();
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+  // YYYY-MM-DD 형식으로 변환
+  const firstDayStr = firstDayOfMonth.toISOString().split('T')[0];
+  const lastDayStr = lastDayOfMonth.toISOString().split('T')[0];
+
+  return {
+    firstDay: firstDayStr,
+    lastDay: lastDayStr,
+  };
+}

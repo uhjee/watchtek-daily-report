@@ -2,7 +2,12 @@ import { SchedulerService } from './services/scheduler';
 import { ReportService } from './services/reportService';
 import { NotionService } from './services/notionService';
 import { getToday } from './utils/dateUtils';
-import { ReportDailyData, ReportWeeklyData } from './types/report';
+import {
+  ReportDailyData,
+  ReportWeeklyData,
+  ReportDataForCreatePage,
+  ReportData,
+} from './types/report.d';
 
 async function main() {
   try {
@@ -18,10 +23,7 @@ async function main() {
     // null 체크 추가 (휴일인 경우)
     if (formattedReports) {
       const createPagePromises = (
-        Object.entries(formattedReports) as [
-          string,
-          ReportDailyData | ReportWeeklyData,
-        ][]
+        Object.entries(formattedReports) as [string, ReportDataForCreatePage][]
       ).map(([key, report]) => {
         return notionService.createReportPage(report, today);
       });
