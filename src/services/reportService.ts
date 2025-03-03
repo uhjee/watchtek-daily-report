@@ -12,7 +12,7 @@ import {
   ReportWeeklyData,
   ReportData,
   ManDayByPersonWithReports,
-  ReportMonthlyData
+  ReportMonthlyData,
 } from '../types/report.d';
 import memberMap from '../config/members';
 import { NotionStringifyService } from './notionStringifyService';
@@ -714,9 +714,11 @@ export class ReportService {
   ): Promise<ReportMonthlyData> {
     const reports = await this.getMonthlyReportsData();
     const formattedReports = this.formatReportData(reports);
-    const groupedReports = this.formatMonthlyReports(formattedReports);
+    // 중복 제거 처리
+    const distinctReports = this.distinctReports(formattedReports);
+    const groupedReports = this.formatMonthlyReports(distinctReports);
 
-    const manDayByPerson = this.getManDayByPerson(formattedReports);
+    const manDayByPerson = this.getManDayByPerson(distinctReports);
     const manDayByPersonTexts =
       this.stringifyService.stringifyMonthlyManDayByPerson(manDayByPerson);
 
@@ -724,9 +726,9 @@ export class ReportService {
       groupedReports,
       startDate,
     );
-    const monthlyManDaySummary = this.getManDaySummary(formattedReports);
+    const monthlyManDaySummary = this.getManDaySummary(distinctReports);
     const monthlyManDaySummaryByGroup =
-      this.calculateMonthlyManDay(formattedReports);
+      this.calculateMonthlyManDay(distinctReports);
     const manDayText =
       this.stringifyService.stringifyManDayMap(monthlyManDaySummary);
     const manDayByGroupText = this.stringifyService.stringifyManDayMap(
@@ -764,7 +766,8 @@ export class ReportService {
    */
   async getMonthlyReportsData() {
     // 이번 달의 첫날과 마지막 날 가져오기
-    const { firstDay: firstDayStr, lastDay: lastDayStr } = getCurrentMonthRange();
+    const { firstDay: firstDayStr, lastDay: lastDayStr } =
+      getCurrentMonthRange();
 
     const filter = {
       and: [
@@ -821,8 +824,14 @@ export class ReportService {
     );
 
     // 각 그룹 포맷팅
-    const progressGroup = this.formatMonthlyReportGroup(progressReports, '진행업무');
-    const completedGroup = this.formatMonthlyReportGroup(completedReports, '완료업무');
+    const progressGroup = this.formatMonthlyReportGroup(
+      progressReports,
+      '진행업무',
+    );
+    const completedGroup = this.formatMonthlyReportGroup(
+      completedReports,
+      '완료업무',
+    );
 
     return [progressGroup, completedGroup];
   }
@@ -835,14 +844,61 @@ export class ReportService {
    */
   private formatMonthlyReportGroup(
     reports: DailyReport[],
-    type: '진행업무' | '예정업무' | '완료업무'
+    type: '진행업무' | '예정업무' | '완료업무',
   ): DailyReportGroup {
     const groupedByMain = this.groupByMainCategory(reports);
     const formattedGroups = this.formatGroups(groupedByMain);
-    
+
     return {
       type,
       groups: formattedGroups,
     };
+  }
+
+  /**
+   * 중복된 보고서를 제거하고 최신 데이터로 병합한다
+   * @param reports - 보고서 데이터 배열
+   * @returns 중복이 제거된 보고서 데이터 배열
+   */
+  private distinctReports(reports: DailyReport[]): DailyReport[] {
+    // 중복 체크를 위한 맵 (키: title-customer-person)
+    const uniqueMap = new Map<string, DailyReport>();
+
+    // manDay 합계를 저장할 맵
+    const manDaySumMap = new Map<string, number>();
+
+    // 모든 보고서를 순회하며 중복 체크 및 manDay 합산
+    reports.forEach((report) => {
+      // 중복 체크 키 생성
+      const key = `${report.title}-${report.customer}-${report.person}`;
+
+      // manDay 합산 처리
+      const currentManDay = manDaySumMap.get(key) || 0;
+      manDaySumMap.set(key, currentManDay + report.manDay);
+
+      // 이미 맵에 존재하는 경우, 날짜 비교 후 최신 데이터로 업데이트
+      if (uniqueMap.has(key)) {
+        const existingReport = uniqueMap.get(key)!;
+        const existingDate = new Date(existingReport.date.start);
+        const currentDate = new Date(report.date.start);
+
+        // 현재 보고서의 날짜가 더 최신인 경우에만 업데이트
+        if (currentDate > existingDate) {
+          uniqueMap.set(key, report);
+        }
+      } else {
+        // 맵에 없는 경우 추가
+        uniqueMap.set(key, report);
+      }
+    });
+
+    // 최종 결과 생성 (manDay 합계 적용)
+    return Array.from(uniqueMap.entries()).map(([key, report]) => {
+      // 해당 키의 manDay 합계로 업데이트
+      return {
+        ...report,
+        manDay: manDaySumMap.get(key) || report.manDay,
+      };
+    });
   }
 }
