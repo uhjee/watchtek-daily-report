@@ -110,7 +110,14 @@ export class ReportService {
       true,
     );
 
-    return { title, text, manDayText, manDayByGroupText, manDayByPersonText };
+    return { 
+      reportType: 'weekly',
+      title, 
+      text, 
+      manDayText, 
+      manDayByGroupText, 
+      manDayByPersonText 
+    };
   }
 
   /**
@@ -138,7 +145,7 @@ export class ReportService {
     startDate: string,
     endDate?: string,
   ): Promise<ReportDailyData> {
-    // 1. 원본 데이터 조회
+    // 1. 원본 데이터 조회 (일일 보고서용)
     const reports = await this.getDailyReportsData(startDate);
 
     // 2. 기본 데이터 포맷 변환
@@ -157,7 +164,31 @@ export class ReportService {
       startDate,
     );
 
-    return { title, text, manDayText };
+    // 6. 이번 주 데이터 조회 (manDayByPerson 계산용)
+    const weeklyReports = await this.getWeeklyReportsData();
+    const formattedWeeklyReports = this.formatReportData(weeklyReports);
+    
+    // 7. 이번 주 데이터 기준으로 manDayByPerson 계산
+    const manDayByPerson = this.getManDayByPerson(formattedWeeklyReports);
+    const manDayByPersonText = 
+      this.stringifyService.stringifyWeeklyManDayByPerson(manDayByPerson);
+    
+    // 8. 이번 주 데이터 기준으로 manDayByGroup 계산
+    const weeklyManDaySummaryByGroup = 
+      this.calculateWeeklyManDay(formattedWeeklyReports);
+    const manDayByGroupText = this.stringifyService.stringifyManDayMap(
+      weeklyManDaySummaryByGroup,
+      true,
+    );
+
+    return { 
+      reportType: 'daily',
+      title, 
+      text, 
+      manDayText, 
+      manDayByGroupText, 
+      manDayByPersonText 
+    };
   }
 
   /**
@@ -737,6 +768,7 @@ export class ReportService {
     );
 
     return {
+      reportType: 'monthly',
       title,
       texts,
       manDayText,

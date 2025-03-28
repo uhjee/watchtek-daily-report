@@ -79,70 +79,57 @@ export class NotionService {
   }
 
   /**
-   * 주어진 데이터가 주간 보고서 데이터인지 확인한다
-   * @param data - 확인할 보고서 데이터
-   * @returns 주간 보고서 데이터 여부
-   */
-  isWeeklyData(data: ReportDataForCreatePage): data is ReportWeeklyData {
-    return 'manDayByGroupText' in data && !('isMonthlyReport' in data);
-  }
-
-  /**
-   * 데이터가 월간 보고서 데이터인지 확인합니다
-   * @param data - 확인할 데이터
-   * @returns 월간 보고서 데이터인지 여부
-   */
-  isMonthlyData(data: ReportDataForCreatePage): data is ReportMonthlyData {
-    return (
-      'manDayByGroupText' in data &&
-      'isMonthlyReport' in data &&
-      'texts' in data &&
-      Array.isArray((data as any).texts)
-    );
-  }
-
-  /**
    * 리포트 데이터베이스에 새로운 페이지를 생성한다
    * @param reportData - 생성할 보고서 데이터 (일일/주간/월간)
    * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
    * @returns 생성된 Notion 페이지
    */
   async createReportPage(reportData: ReportDataForCreatePage, date: string) {
-    const { title, text, manDayText } = reportData;
+    const { title, text, manDayText, reportType } = reportData;
 
     try {
       let response;
 
-      if (this.isWeeklyData(reportData)) {
-        // 주간 보고서 생성
-        const { manDayByGroupText, manDayByPersonText } = reportData;
-        response = await this.createWeeklyReportPage(
-          title,
-          date,
-          text ?? '',
-          manDayText,
-          manDayByGroupText,
-          manDayByPersonText,
-        );
-      } else if (this.isMonthlyData(reportData)) {
-        // 월간 보고서 생성
-        const { manDayByGroupText, manDayByPersonTexts, texts } = reportData;
-        response = await this.createMonthlyReportPage(
-          title,
-          date,
-          texts,
-          manDayText,
-          manDayByGroupText,
-          manDayByPersonTexts,
-        );
-      } else {
-        // 일일 보고서 생성
-        response = await this.createDailyReportPage(
-          title,
-          date,
-          text ?? '',
-          manDayText,
-        );
+      switch (reportType) {
+        case 'weekly':
+          // 주간 보고서 생성
+          const weeklyData = reportData as ReportWeeklyData;
+          response = await this.createWeeklyReportPage(
+            title,
+            date,
+            text ?? '',
+            manDayText,
+            weeklyData.manDayByGroupText,
+            weeklyData.manDayByPersonText
+          );
+          break;
+          
+        case 'monthly':
+          // 월간 보고서 생성
+          const monthlyData = reportData as ReportMonthlyData;
+          response = await this.createMonthlyReportPage(
+            title,
+            date,
+            monthlyData.texts,
+            manDayText,
+            monthlyData.manDayByGroupText,
+            monthlyData.manDayByPersonTexts
+          );
+          break;
+          
+        case 'daily':
+        default:
+          // 일일 보고서 생성
+          const dailyData = reportData as ReportDailyData;
+          response = await this.createDailyReportPage(
+            title,
+            date,
+            text ?? '',
+            manDayText,
+            dailyData.manDayByGroupText,
+            dailyData.manDayByPersonText
+          );
+          break;
       }
 
       return response;
@@ -250,7 +237,79 @@ export class NotionService {
     date: string,
     text: string,
     manDayText: string,
+    manDayByGroupText?: string,
+    manDayByPersonText?: string,
   ) {
+    // 기본 블록 구성
+    const children: BlockObjectRequest[] = [
+      {
+        object: 'block' as const,
+        type: 'code' as const,
+        code: {
+          rich_text: [
+            {
+              type: 'text' as const,
+              text: {
+                content: text,
+              },
+            },
+          ],
+          language: 'javascript',
+        },
+      },
+      {
+        object: 'block' as const,
+        type: 'paragraph' as const,
+        paragraph: {
+          rich_text: [
+            {
+              type: 'text' as const,
+              text: {
+                content: manDayText,
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    // manDayByGroupText가 있으면 추가
+    if (manDayByGroupText) {
+      children.push({
+        object: 'block' as const,
+        type: 'paragraph' as const,
+        paragraph: {
+          rich_text: [
+            {
+              type: 'text' as const,
+              text: {
+                content: manDayByGroupText,
+              },
+            },
+          ],
+        },
+      });
+    }
+
+    // manDayByPersonText가 있으면 추가
+    if (manDayByPersonText) {
+      children.push({
+        object: 'block' as const,
+        type: 'code' as const,
+        code: {
+          rich_text: [
+            {
+              type: 'text' as const,
+              text: {
+                content: manDayByPersonText,
+              },
+            },
+          ],
+          language: 'javascript',
+        },
+      });
+    }
+
     return notionClient.pages.create({
       parent: {
         database_id: this.reportDatabaseId,
@@ -274,37 +333,7 @@ export class NotionService {
           },
         },
       },
-      children: [
-        {
-          object: 'block' as const,
-          type: 'code' as const,
-          code: {
-            rich_text: [
-              {
-                type: 'text' as const,
-                text: {
-                  content: text,
-                },
-              },
-            ],
-            language: 'javascript',
-          },
-        },
-        {
-          object: 'block' as const,
-          type: 'paragraph' as const,
-          paragraph: {
-            rich_text: [
-              {
-                type: 'text' as const,
-                text: {
-                  content: manDayText,
-                },
-              },
-            ],
-          },
-        },
-      ],
+      children,
     });
   }
 

@@ -114,17 +114,22 @@ export interface MonthlyReportForm extends ReportForm {
 
 // 일일 보고서 데이터
 export interface ReportDailyData extends ReportForm {
+  reportType: 'daily';
   manDayText: string;
+  manDayByGroupText?: string;
+  manDayByPersonText?: string;
 }
 
 // 주간 보고서 데이터
 export interface ReportWeeklyData extends ReportDailyData {
+  reportType: 'weekly';
   manDayByGroupText: string;
   manDayByPersonText: string;
 }
 
 // 월간 보고서 데이터
 export interface ReportMonthlyData extends ReportWeeklyData {
+  reportType: 'monthly';
   isMonthlyReport: boolean;
   texts: string[];
   text?: string;
