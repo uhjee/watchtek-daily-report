@@ -1,6 +1,6 @@
 import { NotionService } from './notionService';
 import { QueryDatabaseParameters } from '@notionhq/client/build/src/api-endpoints';
-import { getToday, getNextDay, getCurrentMonthRange } from '../utils/dateUtils';
+import { getToday, getNextDay, getCurrentMonthRange, isLastFridayOfMonth } from '../utils/dateUtils';
 import {
   DailyReport,
   DailyReportItem,
@@ -52,30 +52,13 @@ export class ReportService {
       result.weeklyData = weeklyReport;
 
       // 이번 달의 마지막 주 금요일인지 확인
-      if (this.isLastFridayOfMonth(date)) {
+      if (isLastFridayOfMonth(date)) {
         const monthlyReport = await this.getMonthlyReports(startDate, endDate);
         result.monthlyData = monthlyReport;
       }
     }
 
     return result;
-  }
-
-  /**
-   * 주어진 날짜가 해당 월의 마지막 주 금요일인지 확인한다
-   * @param date - 확인할 날짜
-   * @returns 마지막 주 금요일 여부
-   */
-  private isLastFridayOfMonth(date: Date): boolean {
-    // 현재 날짜가 금요일인지 확인 (이미 호출 전에 확인했지만 안전을 위해 재확인)
-    if (date.getDay() !== 5) return false;
-
-    // 다음 금요일의 날짜 계산
-    const nextFriday = new Date(date);
-    nextFriday.setDate(date.getDate() + 7);
-
-    // 다음 금요일이 다음 달에 속하는지 확인
-    return nextFriday.getMonth() !== date.getMonth();
   }
 
   /**
@@ -124,9 +107,8 @@ export class ReportService {
    * 주간 보고서 manDay를 계산하는 함수
    * 집계 기준: report.group
    * 집계 결과: 각 그룹별 manDay 합계
-   * @param   {DailyReport[]}   reports  [reports description]
-   
-   * @return  {ManDayByPerson}           [return description]
+   * @param reports - 일일 보고서 데이터 배열
+   * @returns 그룹별 공수 합계
    */
   private calculateWeeklyManDay(reports: DailyReport[]): ManDayByPerson {
     return reports.reduce((acc, report) => {
@@ -247,9 +229,8 @@ export class ReportService {
   }
 
   /**
-   *이번 주 일일 보고서를 조회합니다
-   *
-   * @return  {[type]}  [return description]
+   * 이번 주 일일 보고서를 조회합니다
+   * @returns 이번 주 보고서 데이터
    */
   async getWeeklyReportsData() {
     const filter = {
