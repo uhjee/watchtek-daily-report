@@ -29,9 +29,9 @@ export function formatDateToYYYYMMDD(date: Date): string {
  */
 export function getToday(): string {
   const now = new Date();
-  // return formatDateToYYYYMMDD(now);
+  return formatDateToYYYYMMDD(now);
   // 테스트용 고정 날짜는 주석 처리
-  return '2025-04-25';
+  // return '2025-04-25';
 }
 
 /**
@@ -104,12 +104,24 @@ export function getMonthRange(date: Date): {
  */
 export function isLastFridayOfMonth(date: Date): boolean {
   // 현재 날짜가 금요일인지 확인 (금요일 = 5)
-  if (date.getDay() !== 5) return false;
+  if (date.getDay() !== 5) {
+    return false;
+  }
+
+  // 이번 주 수요일 계산 (현재 날짜 - 2일)
+  const thisWednesday = new Date(date);
+  thisWednesday.setDate(date.getDate() - 2);
 
   // 다음 주 수요일의 날짜 계산 (현재 날짜 + 5일)
   const nextWednesday = new Date(date);
   nextWednesday.setDate(date.getDate() + 5);
 
-  // 다음 주 수요일이 다음 달에 속하는지 확인
-  return nextWednesday.getMonth() !== date.getMonth();
+  // 이번 주 수요일과 다음 주 수요일의 월 비교
+  const thisWednesdayMonth = thisWednesday.getMonth();
+  const nextWednesdayMonth = nextWednesday.getMonth();
+
+  // 이번 주 수요일과 다음 주 수요일이 다른 달에 속하는지 확인
+  const result = thisWednesdayMonth !== nextWednesdayMonth;
+
+  return result;
 }
