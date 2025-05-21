@@ -241,8 +241,21 @@ export class NotionService {
     manDayByPersonText?: string,
   ) {
     // 기본 블록 구성
-    const children: BlockObjectRequest[] = [
-      {
+    const children: BlockObjectRequest[] = [];
+
+    // 텍스트를 2000자 단위로 나누는 함수
+    const splitTextIntoChunks = (text: string): string[] => {
+      const chunks: string[] = [];
+      for (let i = 0; i < text.length; i += 2000) {
+        chunks.push(text.slice(i, i + 2000));
+      }
+      return chunks;
+    };
+
+    // text가 2000자 이상인 경우 나누기
+    const textChunks = splitTextIntoChunks(text);
+    textChunks.forEach(chunk => {
+      children.push({
         object: 'block' as const,
         type: 'code' as const,
         code: {
@@ -250,28 +263,30 @@ export class NotionService {
             {
               type: 'text' as const,
               text: {
-                content: text,
+                content: chunk,
               },
             },
           ],
           language: 'javascript',
         },
-      },
-      {
-        object: 'block' as const,
-        type: 'paragraph' as const,
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text' as const,
-              text: {
-                content: manDayText,
-              },
+      });
+    });
+
+    // manDayText 블록 추가
+    children.push({
+      object: 'block' as const,
+      type: 'paragraph' as const,
+      paragraph: {
+        rich_text: [
+          {
+            type: 'text' as const,
+            text: {
+              content: manDayText,
             },
-          ],
-        },
+          },
+        ],
       },
-    ];
+    });
 
     // manDayByGroupText가 있으면 추가
     if (manDayByGroupText) {
@@ -291,22 +306,25 @@ export class NotionService {
       });
     }
 
-    // manDayByPersonText가 있으면 추가
+    // manDayByPersonText가 있으면 추가 (2000자 제한 적용)
     if (manDayByPersonText) {
-      children.push({
-        object: 'block' as const,
-        type: 'code' as const,
-        code: {
-          rich_text: [
-            {
-              type: 'text' as const,
-              text: {
-                content: manDayByPersonText,
+      const personTextChunks = splitTextIntoChunks(manDayByPersonText);
+      personTextChunks.forEach(chunk => {
+        children.push({
+          object: 'block' as const,
+          type: 'code' as const,
+          code: {
+            rich_text: [
+              {
+                type: 'text' as const,
+                text: {
+                  content: chunk,
+                },
               },
-            },
-          ],
-          language: 'javascript',
-        },
+            ],
+            language: 'javascript',
+          },
+        });
       });
     }
 
