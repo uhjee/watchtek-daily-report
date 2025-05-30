@@ -147,6 +147,90 @@ export class NotionService {
     manDayByGroupText: string,
     manDayByPersonText: string,
   ) {
+    // 텍스트를 2000자 단위로 나누는 함수
+    const splitTextIntoChunks = (text: string): string[] => {
+      const chunks: string[] = [];
+      for (let i = 0; i < text.length; i += 2000) {
+        chunks.push(text.slice(i, i + 2000));
+      }
+      return chunks;
+    };
+
+    // 기본 블록 구성
+    const children: BlockObjectRequest[] = [];
+
+    // text 청크 생성 및 추가
+    const textChunks = splitTextIntoChunks(text);
+    textChunks.forEach(chunk => {
+      children.push({
+        object: 'block' as const,
+        type: 'code' as const,
+        code: {
+          rich_text: [
+            {
+              type: 'text' as const,
+              text: {
+                content: chunk,
+              },
+            },
+          ],
+          language: 'javascript',
+        },
+      });
+    });
+
+    // manDayText 블록 추가
+    children.push({
+      object: 'block' as const,
+      type: 'paragraph' as const,
+      paragraph: {
+        rich_text: [
+          {
+            type: 'text' as const,
+            text: {
+              content: manDayText,
+            },
+          },
+        ],
+      },
+    });
+
+    // manDayByGroupText 블록 추가
+    children.push({
+      object: 'block' as const,
+      type: 'paragraph' as const,
+      paragraph: {
+        rich_text: [
+          {
+            type: 'text' as const,
+            text: {
+              content: manDayByGroupText,
+            },
+          },
+        ],
+      },
+    });
+
+    // manDayByPersonText 청크 생성 및 추가
+    const personTextChunks = splitTextIntoChunks(manDayByPersonText);
+    personTextChunks.forEach(chunk => {
+      children.push({
+        object: 'block' as const,
+        type: 'code' as const,
+        code: {
+          rich_text: [
+            {
+              type: 'text' as const,
+              text: {
+                content: chunk,
+              },
+            },
+          ],
+          language: 'javascript',
+        },
+      });
+    });
+
     return notionClient.pages.create({
       parent: {
         database_id: this.reportDatabaseId,
@@ -170,68 +254,10 @@ export class NotionService {
           },
         },
       },
-      children: [
-        {
-          object: 'block' as const,
-          type: 'code' as const,
-          code: {
-            rich_text: [
-              {
-                type: 'text' as const,
-                text: {
-                  content: text,
-                },
-              },
-            ],
-            language: 'javascript',
-          },
-        },
-        {
-          object: 'block' as const,
-          type: 'paragraph' as const,
-          paragraph: {
-            rich_text: [
-              {
-                type: 'text' as const,
-                text: {
-                  content: manDayText,
-                },
-              },
-            ],
-          },
-        },
-        {
-          object: 'block' as const,
-          type: 'paragraph' as const,
-          paragraph: {
-            rich_text: [
-              {
-                type: 'text' as const,
-                text: {
-                  content: manDayByGroupText,
-                },
-              },
-            ],
-          },
-        },
-        {
-          object: 'block' as const,
-          type: 'code' as const,
-          code: {
-            rich_text: [
-              {
-                type: 'text' as const,
-                text: {
-                  content: manDayByPersonText,
-                },
-              },
-            ],
-            language: 'javascript',
-          },
-        },
-      ],
+      children,
     });
   }
+
   createDailyReportPage(
     title: string,
     date: string,
