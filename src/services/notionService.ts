@@ -11,6 +11,7 @@ import {
   ReportMonthlyData,
   ReportDailyData,
 } from '../types/report.d';
+import { splitTextIntoChunks } from '../utils/stringUtils';
 
 export class NotionService {
   private databaseId: string;
@@ -147,15 +148,6 @@ export class NotionService {
     manDayByGroupText: string,
     manDayByPersonText: string,
   ) {
-    // 텍스트를 2000자 단위로 나누는 함수
-    const splitTextIntoChunks = (text: string): string[] => {
-      const chunks: string[] = [];
-      for (let i = 0; i < text.length; i += 2000) {
-        chunks.push(text.slice(i, i + 2000));
-      }
-      return chunks;
-    };
-
     // 기본 블록 구성
     const children: BlockObjectRequest[] = [];
 
@@ -268,15 +260,6 @@ export class NotionService {
   ) {
     // 기본 블록 구성
     const children: BlockObjectRequest[] = [];
-
-    // 텍스트를 2000자 단위로 나누는 함수
-    const splitTextIntoChunks = (text: string): string[] => {
-      const chunks: string[] = [];
-      for (let i = 0; i < text.length; i += 2000) {
-        chunks.push(text.slice(i, i + 2000));
-      }
-      return chunks;
-    };
 
     // text가 2000자 이상인 경우 나누기
     const textChunks = splitTextIntoChunks(text);
@@ -399,74 +382,83 @@ export class NotionService {
     manDayByGroupText: string,
     manDayByPersonTexts: string[],
   ) {
-    // 각 텍스트에 대한 코드 블록 생성
-    const textBlocks = texts.map((text) => ({
+    // 기본 블록 구성
+    const children: BlockObjectRequest[] = [];
+
+    // 각 텍스트에 대한 코드 블록 생성 (2000자 제한 적용)
+    texts.forEach((text) => {
+      const textChunks = splitTextIntoChunks(text);
+      textChunks.forEach(chunk => {
+        children.push({
+          object: 'block' as const,
+          type: 'code' as const,
+          code: {
+            rich_text: [
+              {
+                type: 'text' as const,
+                text: {
+                  content: chunk,
+                },
+              },
+            ],
+            language: 'javascript',
+          },
+        });
+      });
+    });
+
+    // 공수 정보 블록 추가
+    children.push({
       object: 'block' as const,
-      type: 'code' as const,
-      code: {
+      type: 'paragraph' as const,
+      paragraph: {
         rich_text: [
           {
             type: 'text' as const,
             text: {
-              content: text,
+              content: manDayText,
             },
           },
         ],
-        language: 'javascript',
       },
-    }));
+    });
 
-    // 인원별 공수 정보 블록 생성
-    const personManDayBlocks = manDayByPersonTexts.map((text) => ({
+    children.push({
       object: 'block' as const,
-      type: 'code' as const,
-      code: {
+      type: 'paragraph' as const,
+      paragraph: {
         rich_text: [
           {
             type: 'text' as const,
             text: {
-              content: text,
+              content: manDayByGroupText,
             },
           },
         ],
-        language: 'javascript',
       },
-    }));
+    });
 
-    // 공수 정보 블록
-    const manDayBlocks = [
-      {
-        object: 'block' as const,
-        type: 'paragraph' as const,
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text' as const,
-              text: {
-                content: manDayText,
+    // 인원별 공수 정보 블록 생성 (2000자 제한 적용)
+    manDayByPersonTexts.forEach((text) => {
+      const textChunks = splitTextIntoChunks(text);
+      textChunks.forEach(chunk => {
+        children.push({
+          object: 'block' as const,
+          type: 'code' as const,
+          code: {
+            rich_text: [
+              {
+                type: 'text' as const,
+                text: {
+                  content: chunk,
+                },
               },
-            },
-          ],
-        },
-      },
-      {
-        object: 'block' as const,
-        type: 'paragraph' as const,
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text' as const,
-              text: {
-                content: manDayByGroupText,
-              },
-            },
-          ],
-        },
-      },
-    ];
-
-    // 모든 블록 합치기
-    const children = [...textBlocks, ...manDayBlocks, ...personManDayBlocks] as BlockObjectRequest[];
+            ],
+            language: 'javascript',
+          },
+        });
+      });
+    });
 
     return notionClient.pages.create({
       parent: {
