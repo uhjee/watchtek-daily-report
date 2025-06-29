@@ -7,6 +7,8 @@ import {
   DailyReport,
 } from '../types/report.d';
 import { getWeekOfMonth } from '../utils/dateUtils';
+import { formatReportItemText, formatReportGroupTitle } from '../utils/reportUtils';
+import { TEXT_LIMITS } from '../constants/reportConstants';
 
 export class NotionStringifyService {
   /**
@@ -26,9 +28,7 @@ export class NotionStringifyService {
     // 각 그룹(진행업무/예정업무)에 대해 처리
     reports.forEach((reportGroup) => {
       // 그룹 제목 추가
-      text += `****${
-        reportGroup.type === '진행업무' ? '업무 진행 사항' : '업무 계획 사항'
-      }****\n`;
+      text += formatReportGroupTitle(reportGroup.type) + '\n';
 
       // 각 업무 그룹 처리
       reportGroup.groups.forEach((group, groupIndex) => {
@@ -40,14 +40,8 @@ export class NotionStringifyService {
           text += `[${subGroup.subGroup}]\n`;
 
           subGroup.items.forEach((item) => {
-            const title = item.customer
-              ? `[${item.customer}] ${item.title}`
-              : item.title;
-
-            const progress =
-              reportGroup.type === '진행업무' ? `, ${item.progressRate}%` : '';
-
-            text += `- ${title}(${item.person}${progress})\n`;
+            const includeProgress = reportGroup.type === '진행업무';
+            text += formatReportItemText(item, includeProgress) + '\n';
           });
           text += '\n';
         });
@@ -105,9 +99,7 @@ export class NotionStringifyService {
     // 각 그룹(진행업무/예정업무)에 대해 처리
     reports.forEach((reportGroup) => {
       // 그룹 제목 추가
-      text += `****${
-        reportGroup.type === '진행업무' ? '금주 진행 사항' : '차주 계획 사항'
-      }****\n`;
+      text += formatReportGroupTitle(reportGroup.type, true) + '\n';
 
       // 각 업무 그룹 처리
       reportGroup.groups.forEach((group, groupIndex) => {
@@ -119,14 +111,8 @@ export class NotionStringifyService {
           text += `[${subGroup.subGroup}]\n`;
 
           subGroup.items.forEach((item) => {
-            const title = item.customer
-              ? `[${item.customer}] ${item.title}`
-              : item.title;
-
-            const progress =
-              reportGroup.type === '진행업무' ? `, ${item.progressRate}%` : '';
-
-            text += `- ${title}(${item.person}${progress})\n`;
+            const includeProgress = reportGroup.type === '진행업무';
+            text += formatReportItemText(item, includeProgress) + '\n';
           });
           text += '\n';
         });
@@ -189,11 +175,12 @@ export class NotionStringifyService {
     // 각 그룹(진행업무/완료업무)에 대해 처리
     reports.forEach((reportGroup) => {
       // 그룹 제목 추가
-      const groupTitle = `****${
-        reportGroup.type === '진행업무' ? '진행 중인 업무' : '완료된 업무'
-      }****\n`;
-
-      texts.push(groupTitle);
+      const titleMap: Record<string, string> = {
+        '진행업무': '****진행 중인 업무****',
+        '완료업무': '****완료된 업무****',
+      };
+      const groupTitle = titleMap[reportGroup.type] || `****${reportGroup.type}****`;
+      texts.push(groupTitle + '\n');
 
       // 각 업무 그룹 처리
       reportGroup.groups.forEach((group, groupIndex) => {
@@ -204,13 +191,7 @@ export class NotionStringifyService {
           groupText += `[${subGroup.subGroup}]\n`;
 
           subGroup.items.forEach((item) => {
-            const title = item.customer
-              ? `[${item.customer}] ${item.title}`
-              : item.title;
-
-            const progress = `, ${item.progressRate}%`;
-
-            groupText += `- ${title}(${item.person}${progress})\n`;
+            groupText += formatReportItemText(item, true) + '\n';
           });
           groupText += '\n';
         });
@@ -240,7 +221,7 @@ export class NotionStringifyService {
     manDayByPerson: ManDayByPersonWithReports[],
   ): string[] {
     const result: string[] = [];
-    const MAX_TEXT_LENGTH = 2000; // 최대 텍스트 길이
+    const MAX_TEXT_LENGTH = TEXT_LIMITS.MONTHLY_REPORT_MAX_LENGTH;
 
     // 각 인원별로 별도의 문자열 생성
     manDayByPerson.forEach((personData) => {

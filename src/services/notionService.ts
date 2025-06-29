@@ -12,6 +12,12 @@ import {
   ReportDailyData,
 } from '../types/report.d';
 import { splitTextIntoChunks } from '../utils/stringUtils';
+import { 
+  createCodeBlocks, 
+  createParagraphBlock, 
+  createMultipleCodeBlocks,
+  createPageProperties 
+} from '../utils/notionBlockUtils';
 
 export class NotionService {
   private databaseId: string;
@@ -148,80 +154,12 @@ export class NotionService {
     manDayByGroupText: string,
     manDayByPersonText: string,
   ) {
-    // 기본 블록 구성
-    const children: BlockObjectRequest[] = [];
-
-    // text 청크 생성 및 추가
-    const textChunks = splitTextIntoChunks(text);
-    textChunks.forEach(chunk => {
-      children.push({
-        object: 'block' as const,
-        type: 'code' as const,
-        code: {
-          rich_text: [
-            {
-              type: 'text' as const,
-              text: {
-                content: chunk,
-              },
-            },
-          ],
-          language: 'javascript',
-        },
-      });
-    });
-
-    // manDayText 블록 추가
-    children.push({
-      object: 'block' as const,
-      type: 'paragraph' as const,
-      paragraph: {
-        rich_text: [
-          {
-            type: 'text' as const,
-            text: {
-              content: manDayText,
-            },
-          },
-        ],
-      },
-    });
-
-    // manDayByGroupText 블록 추가
-    children.push({
-      object: 'block' as const,
-      type: 'paragraph' as const,
-      paragraph: {
-        rich_text: [
-          {
-            type: 'text' as const,
-            text: {
-              content: manDayByGroupText,
-            },
-          },
-        ],
-      },
-    });
-
-    // manDayByPersonText 청크 생성 및 추가
-    const personTextChunks = splitTextIntoChunks(manDayByPersonText);
-    personTextChunks.forEach(chunk => {
-      children.push({
-        object: 'block' as const,
-        type: 'code' as const,
-        code: {
-          rich_text: [
-            {
-              type: 'text' as const,
-              text: {
-                content: chunk,
-              },
-            },
-          ],
-          language: 'javascript',
-        },
-      });
-    });
+    const children: BlockObjectRequest[] = [
+      ...createCodeBlocks(text),
+      createParagraphBlock(manDayText),
+      createParagraphBlock(manDayByGroupText),
+      ...createCodeBlocks(manDayByPersonText),
+    ];
 
     return notionClient.pages.create({
       parent: {
@@ -230,22 +168,7 @@ export class NotionService {
       icon: {
         emoji: '🔶',
       },
-      properties: {
-        title: {
-          title: [
-            {
-              text: {
-                content: title,
-              },
-            },
-          ],
-        },
-        Date: {
-          date: {
-            start: date,
-          },
-        },
-      },
+      properties: createPageProperties(title, date),
       children,
     });
   }
@@ -258,83 +181,17 @@ export class NotionService {
     manDayByGroupText?: string,
     manDayByPersonText?: string,
   ) {
-    // 기본 블록 구성
-    const children: BlockObjectRequest[] = [];
+    const children: BlockObjectRequest[] = [
+      ...createCodeBlocks(text),
+      createParagraphBlock(manDayText),
+    ];
 
-    // text가 2000자 이상인 경우 나누기
-    const textChunks = splitTextIntoChunks(text);
-    textChunks.forEach(chunk => {
-      children.push({
-        object: 'block' as const,
-        type: 'code' as const,
-        code: {
-          rich_text: [
-            {
-              type: 'text' as const,
-              text: {
-                content: chunk,
-              },
-            },
-          ],
-          language: 'javascript',
-        },
-      });
-    });
-
-    // manDayText 블록 추가
-    children.push({
-      object: 'block' as const,
-      type: 'paragraph' as const,
-      paragraph: {
-        rich_text: [
-          {
-            type: 'text' as const,
-            text: {
-              content: manDayText,
-            },
-          },
-        ],
-      },
-    });
-
-    // manDayByGroupText가 있으면 추가
     if (manDayByGroupText) {
-      children.push({
-        object: 'block' as const,
-        type: 'paragraph' as const,
-        paragraph: {
-          rich_text: [
-            {
-              type: 'text' as const,
-              text: {
-                content: manDayByGroupText,
-              },
-            },
-          ],
-        },
-      });
+      children.push(createParagraphBlock(manDayByGroupText));
     }
 
-    // manDayByPersonText가 있으면 추가 (2000자 제한 적용)
     if (manDayByPersonText) {
-      const personTextChunks = splitTextIntoChunks(manDayByPersonText);
-      personTextChunks.forEach(chunk => {
-        children.push({
-          object: 'block' as const,
-          type: 'code' as const,
-          code: {
-            rich_text: [
-              {
-                type: 'text' as const,
-                text: {
-                  content: chunk,
-                },
-              },
-            ],
-            language: 'javascript',
-          },
-        });
-      });
+      children.push(...createCodeBlocks(manDayByPersonText));
     }
 
     return notionClient.pages.create({
@@ -344,22 +201,7 @@ export class NotionService {
       icon: {
         emoji: '📝',
       },
-      properties: {
-        title: {
-          title: [
-            {
-              text: {
-                content: title,
-              },
-            },
-          ],
-        },
-        Date: {
-          date: {
-            start: date,
-          },
-        },
-      },
+      properties: createPageProperties(title, date),
       children,
     });
   }
@@ -382,83 +224,12 @@ export class NotionService {
     manDayByGroupText: string,
     manDayByPersonTexts: string[],
   ) {
-    // 기본 블록 구성
-    const children: BlockObjectRequest[] = [];
-
-    // 각 텍스트에 대한 코드 블록 생성 (2000자 제한 적용)
-    texts.forEach((text) => {
-      const textChunks = splitTextIntoChunks(text);
-      textChunks.forEach(chunk => {
-        children.push({
-          object: 'block' as const,
-          type: 'code' as const,
-          code: {
-            rich_text: [
-              {
-                type: 'text' as const,
-                text: {
-                  content: chunk,
-                },
-              },
-            ],
-            language: 'javascript',
-          },
-        });
-      });
-    });
-
-    // 공수 정보 블록 추가
-    children.push({
-      object: 'block' as const,
-      type: 'paragraph' as const,
-      paragraph: {
-        rich_text: [
-          {
-            type: 'text' as const,
-            text: {
-              content: manDayText,
-            },
-          },
-        ],
-      },
-    });
-
-    children.push({
-      object: 'block' as const,
-      type: 'paragraph' as const,
-      paragraph: {
-        rich_text: [
-          {
-            type: 'text' as const,
-            text: {
-              content: manDayByGroupText,
-            },
-          },
-        ],
-      },
-    });
-
-    // 인원별 공수 정보 블록 생성 (2000자 제한 적용)
-    manDayByPersonTexts.forEach((text) => {
-      const textChunks = splitTextIntoChunks(text);
-      textChunks.forEach(chunk => {
-        children.push({
-          object: 'block' as const,
-          type: 'code' as const,
-          code: {
-            rich_text: [
-              {
-                type: 'text' as const,
-                text: {
-                  content: chunk,
-                },
-              },
-            ],
-            language: 'javascript',
-          },
-        });
-      });
-    });
+    const children: BlockObjectRequest[] = [
+      ...createMultipleCodeBlocks(texts),
+      createParagraphBlock(manDayText),
+      createParagraphBlock(manDayByGroupText),
+      ...createMultipleCodeBlocks(manDayByPersonTexts),
+    ];
 
     return notionClient.pages.create({
       parent: {
@@ -467,22 +238,7 @@ export class NotionService {
       icon: {
         emoji: '📊',
       },
-      properties: {
-        title: {
-          title: [
-            {
-              text: {
-                content: title,
-              },
-            },
-          ],
-        },
-        Date: {
-          date: {
-            start: date,
-          },
-        },
-      },
+      properties: createPageProperties(title, date),
       children,
     });
   }

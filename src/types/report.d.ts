@@ -95,9 +95,11 @@ export interface NotionPage {
   };
 }
 
+import { ReportGroupType, ReportType } from './reportTypes';
+
 // 일일 보고서 그룹 (진행업무/예정업무)
 export interface DailyReportGroup {
-  type: '진행업무' | '예정업무' | '완료업무';
+  type: ReportGroupType;
   groups: FormattedDailyReport[];
 }
 
@@ -114,7 +116,7 @@ export interface MonthlyReportForm extends ReportForm {
 
 // 일일 보고서 데이터
 export interface ReportDailyData extends ReportForm {
-  reportType: 'daily';
+  reportType: Extract<ReportType, 'daily'>;
   manDayText: string;
   manDayByGroupText?: string;
   manDayByPersonText?: string;
@@ -122,14 +124,14 @@ export interface ReportDailyData extends ReportForm {
 
 // 주간 보고서 데이터
 export interface ReportWeeklyData extends ReportDailyData {
-  reportType: 'weekly';
+  reportType: Extract<ReportType, 'weekly'>;
   manDayByGroupText: string;
   manDayByPersonText: string;
 }
 
 // 월간 보고서 데이터
 export interface ReportMonthlyData extends ReportWeeklyData {
-  reportType: 'monthly';
+  reportType: Extract<ReportType, 'monthly'>;
   isMonthlyReport: boolean;
   texts: string[];
   text?: string;

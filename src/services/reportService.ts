@@ -17,16 +17,22 @@ import {
 import memberMap from '../config/members';
 import { NotionStringifyService } from './notionStringifyService';
 import { MemberService } from './memberService';
+import { ReportAggregationService } from './reportAggregationService';
+import { ReportFormatterService } from './reportFormatterService';
 
 export class ReportService {
   private notionService: NotionService;
   private stringifyService: NotionStringifyService;
   private memberService: MemberService;
+  private aggregationService: ReportAggregationService;
+  private formatterService: ReportFormatterService;
 
   constructor() {
     this.notionService = new NotionService();
     this.stringifyService = new NotionStringifyService();
     this.memberService = new MemberService();
+    this.aggregationService = new ReportAggregationService();
+    this.formatterService = new ReportFormatterService();
   }
 
   /**
@@ -73,9 +79,9 @@ export class ReportService {
   ): Promise<ReportWeeklyData> {
     const reports = await this.getWeeklyReportsData();
     const formattedReports = this.formatReportData(reports);
-    const groupedReports = this.formatWeeklyReports(formattedReports);
+    const groupedReports = this.formatterService.formatWeeklyReports(formattedReports);
 
-    const manDayByPerson = this.getManDayByPerson(formattedReports);
+    const manDayByPerson = this.aggregationService.getManDayByPerson(formattedReports);
     const manDayByPersonText =
       this.stringifyService.stringifyWeeklyManDayByPerson(manDayByPerson);
 
@@ -83,9 +89,9 @@ export class ReportService {
       groupedReports,
       startDate,
     );
-    const weeklyManDaySummary = this.getManDaySummary(formattedReports);
+    const weeklyManDaySummary = this.aggregationService.getManDaySummary(formattedReports);
     const weeklyManDaySummaryByGroup =
-      this.calculateWeeklyManDay(formattedReports);
+      this.aggregationService.getManDayByGroup(formattedReports);
     const manDayText =
       this.stringifyService.stringifyManDayMap(weeklyManDaySummary);
     const manDayByGroupText = this.stringifyService.stringifyManDayMap(
@@ -103,19 +109,6 @@ export class ReportService {
     };
   }
 
-  /**
-   * 주간 보고서 manDay를 계산하는 함수
-   * 집계 기준: report.group
-   * 집계 결과: 각 그룹별 manDay 합계
-   * @param reports - 일일 보고서 데이터 배열
-   * @returns 그룹별 공수 합계
-   */
-  private calculateWeeklyManDay(reports: DailyReport[]): ManDayByPerson {
-    return reports.reduce((acc, report) => {
-      acc[report.group] = (acc[report.group] ?? 0) + report.manDay;
-      return acc;
-    }, {});
-  }
 
   /**
    * 특정 날짜 범위의 일일 보고서를 조회하고 포맷된 데이터를 반환합니다
@@ -134,11 +127,11 @@ export class ReportService {
     const formattedReports = this.formatReportData(reports);
 
     // 3. member별 manDay 집계
-    const manDaySummary = this.getManDaySummary(formattedReports, true);
+    const manDaySummary = this.aggregationService.getManDaySummary(formattedReports, true);
     const manDayText = this.stringifyService.stringifyManDayMap(manDaySummary);
 
     // 4. 보고서 포맷으로 변환
-    const groupedReports = this.formatDailyReports(formattedReports);
+    const groupedReports = this.formatterService.formatDailyReports(formattedReports);
 
     // 5. 텍스트로 변환
     const { title, text } = this.stringifyService.stringifyDailyReports(
@@ -151,13 +144,13 @@ export class ReportService {
     const formattedWeeklyReports = this.formatReportData(weeklyReports);
     
     // 7. 이번 주 데이터 기준으로 manDayByPerson 계산
-    const manDayByPerson = this.getManDayByPerson(formattedWeeklyReports);
+    const manDayByPerson = this.aggregationService.getManDayByPerson(formattedWeeklyReports);
     const manDayByPersonText = 
       this.stringifyService.stringifyWeeklyManDayByPerson(manDayByPerson);
     
     // 8. 이번 주 데이터 기준으로 manDayByGroup 계산
     const weeklyManDaySummaryByGroup = 
-      this.calculateWeeklyManDay(formattedWeeklyReports);
+      this.aggregationService.getManDayByGroup(formattedWeeklyReports);
     const manDayByGroupText = this.stringifyService.stringifyManDayMap(
       weeklyManDaySummaryByGroup,
       true,
@@ -293,45 +286,6 @@ export class ReportService {
     }));
   }
 
-  /**
-   * 보고서의 멤버별 공수를 계산하고 우선순위에 따라 정렬합니다
-   * @param reports - 일일 보고서 데이터 배열
-   * @param skipEmpty - 공수가 0인 멤버 제외 여부
-   * @returns 우선순위로 정렬된 [멤버이름, 공수] 배열
-   */
-  private getManDaySummary(
-    reports: DailyReport[],
-    skipEmpty: boolean = false,
-  ): [string, number][] {
-    let filteredReports = reports;
-    if (skipEmpty) {
-      filteredReports = filteredReports.filter((report) => report.manDay > 0);
-    }
-
-    // 1. 멤버별 공수 합계 계산
-    const manDayMap = filteredReports.reduce((acc, report) => {
-      acc[report.person] = (acc[report.person] || 0) + (report.manDay || 0);
-      return acc;
-    }, {} as { [key: string]: number });
-
-    // 2. [멤버이름, 공수] 배열로 변환
-    const manDayEntries = Object.entries(manDayMap);
-
-    // 3. 멤버 우선순위에 따라 정렬
-    return manDayEntries.sort(([nameA], [nameB]) => {
-      const emailA = this.memberService.getEmailByName(nameA);
-      const emailB = this.memberService.getEmailByName(nameB);
-
-      const priorityA = this.memberService.getMemberPriority(emailA);
-      const priorityB = this.memberService.getMemberPriority(emailB);
-
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-
-      return nameA.localeCompare(nameB);
-    });
-  }
 
   /**
    * 일일 보고서 데이터를 최종 포맷으로 변환합니다
@@ -727,10 +681,10 @@ export class ReportService {
     const reports = await this.getMonthlyReportsData();
     const formattedReports = this.formatReportData(reports);
     // 중복 제거 처리
-    const distinctReports = this.distinctReports(formattedReports);
-    const groupedReports = this.formatMonthlyReports(distinctReports);
+    const distinctReports = this.formatterService.distinctReports(formattedReports);
+    const groupedReports = this.formatterService.formatMonthlyReports(distinctReports);
 
-    const manDayByPerson = this.getManDayByPerson(distinctReports);
+    const manDayByPerson = this.aggregationService.getManDayByPerson(distinctReports);
     const manDayByPersonTexts =
       this.stringifyService.stringifyMonthlyManDayByPerson(manDayByPerson);
 
@@ -738,9 +692,9 @@ export class ReportService {
       groupedReports,
       startDate,
     );
-    const monthlyManDaySummary = this.getManDaySummary(distinctReports);
+    const monthlyManDaySummary = this.aggregationService.getManDaySummary(distinctReports);
     const monthlyManDaySummaryByGroup =
-      this.calculateMonthlyManDay(distinctReports);
+      this.aggregationService.getManDayByGroup(distinctReports);
     const manDayText =
       this.stringifyService.stringifyManDayMap(monthlyManDaySummary);
     const manDayByGroupText = this.stringifyService.stringifyManDayMap(
@@ -759,19 +713,6 @@ export class ReportService {
     };
   }
 
-  /**
-   * 월간 보고서 manDay를 계산하는 함수
-   * 집계 기준: report.group
-   * 집계 결과: 각 그룹별 manDay 합계
-   * @param   {DailyReport[]}   reports  일일 보고서 데이터 배열
-   * @return  {ManDayByPerson}           그룹별 공수 합계
-   */
-  private calculateMonthlyManDay(reports: DailyReport[]): ManDayByPerson {
-    return reports.reduce((acc, report) => {
-      acc[report.group] = (acc[report.group] ?? 0) + report.manDay;
-      return acc;
-    }, {});
-  }
 
   /**
    * 이번 달의 일일 보고서를 조회한다
