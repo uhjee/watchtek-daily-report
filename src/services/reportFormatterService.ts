@@ -285,6 +285,7 @@ export class ReportFormatterService {
         isToday: item.isToday,
         isTomorrow: item.isTomorrow,
         manDay: item.manDay ?? 0,
+        pmsNumber: item.pmsNumber,
       });
     });
 
@@ -366,12 +367,12 @@ export class ReportFormatterService {
   }
 
   /**
-   * 중복된 보고서를 제거하고 최신 데이터로 병합합니다
+   * 중복된 보고서를 제거하고 날짜가 가장 큰 데이터로 병합합니다 (end 우선, 없으면 start)
    * @param reports - 보고서 데이터 배열
    * @returns 중복이 제거된 보고서 데이터 배열
    */
   distinctReports(reports: DailyReport[]): DailyReport[] {
-    // 중복 체크를 위한 맵 (키: title-customer-person)
+    // 중복 체크를 위한 맵 (키: person-pmsNumber 또는 person-title(빈문자열 제거))
     const uniqueMap = new Map<string, DailyReport>();
 
     // manDay 합계를 저장할 맵
@@ -380,19 +381,32 @@ export class ReportFormatterService {
     // 모든 보고서를 순회하며 중복 체크 및 manDay 합산
     reports.forEach((report) => {
       // 중복 체크 키 생성
-      const key = `${report.title}-${report.customer}-${report.person}`;
+      let key: string;
+      if (report.pmsNumber && report.pmsNumber !== null) {
+        // pmsNumber가 있는 경우 pmsNumber로 중복 체크
+        key = `${report.person}-${report.pmsNumber}`;
+      } else {
+        // pmsNumber가 없는 경우 title(빈문자열 제거)로 중복 체크
+        const normalizedTitle = report.title.replace(/\s+/g, '');
+        key = `${report.person}-${normalizedTitle}`;
+      }
 
       // manDay 합산 처리
       const currentManDay = manDaySumMap.get(key) || 0;
-      manDaySumMap.set(key, currentManDay + report.manDay);
+      manDaySumMap.set(key, currentManDay + (report.manDay || 0));
 
-      // 이미 맵에 존재하는 경우, 날짜 비교 후 최신 데이터로 업데이트
+      // 이미 맵에 존재하는 경우, 날짜 비교 후 가장 큰 값으로 업데이트
       if (uniqueMap.has(key)) {
         const existingReport = uniqueMap.get(key)!;
-        const existingDate = new Date(existingReport.date.start);
-        const currentDate = new Date(report.date.start);
+        // end가 있으면 end, 없으면 start를 사용하여 비교
+        const existingDate = existingReport.date.end 
+          ? new Date(existingReport.date.end) 
+          : new Date(existingReport.date.start);
+        const currentDate = report.date.end 
+          ? new Date(report.date.end) 
+          : new Date(report.date.start);
 
-        // 현재 보고서의 날짜가 더 최신인 경우에만 업데이트
+        // 현재 보고서의 날짜가 더 큰 경우에만 업데이트
         if (currentDate > existingDate) {
           uniqueMap.set(key, report);
         }
@@ -407,7 +421,7 @@ export class ReportFormatterService {
       // 해당 키의 manDay 합계로 업데이트
       return {
         ...report,
-        manDay: manDaySumMap.get(key) || report.manDay,
+        manDay: manDaySumMap.get(key) || report.manDay || 0,
       };
     });
   }

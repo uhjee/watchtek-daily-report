@@ -12,6 +12,7 @@ export interface DailyReportItem {
   };
   isToday: boolean;
   isTomorrow: boolean;
+  pmsNumber?: number;
 }
 
 // 일일 보고서 인터페이스 (공수 정보 포함)
@@ -90,6 +91,9 @@ export interface NotionPage {
       };
     };
     ManDay: {
+      number: number;
+    };
+    PmsNumber?: {
       number: number;
     };
   };
