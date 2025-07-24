@@ -10,13 +10,19 @@ import {
   ReportWeeklyData,
   ReportMonthlyData,
   ReportDailyData,
+  ManDayByPersonWithReports,
 } from '../types/report.d';
 import { splitTextIntoChunks } from '../utils/stringUtils';
-import { 
-  createCodeBlocks, 
-  createParagraphBlock, 
+import {
+  createCodeBlocks,
+  createParagraphBlock,
   createMultipleCodeBlocks,
-  createPageProperties 
+  createPageProperties,
+  createHeading2Block,
+  createHeading3Block,
+  createBulletedListItemBlock,
+  createManDayByPersonBlocks,
+  chunkBlocks,
 } from '../utils/notionBlockUtils';
 
 export class NotionService {
@@ -107,10 +113,11 @@ export class NotionService {
             text ?? '',
             manDayText,
             weeklyData.manDayByGroupText,
-            weeklyData.manDayByPersonText
+            weeklyData.manDayByPersonText,
+            weeklyData.manDayByPerson,
           );
           break;
-          
+
         case 'monthly':
           // 월간 보고서 생성
           const monthlyData = reportData as ReportMonthlyData;
@@ -120,10 +127,10 @@ export class NotionService {
             monthlyData.texts,
             manDayText,
             monthlyData.manDayByGroupText,
-            monthlyData.manDayByPersonTexts
+            monthlyData.manDayByPerson,
           );
           break;
-          
+
         case 'daily':
         default:
           // 일일 보고서 생성
@@ -134,7 +141,8 @@ export class NotionService {
             text ?? '',
             manDayText,
             dailyData.manDayByGroupText,
-            dailyData.manDayByPersonText
+            dailyData.manDayByPersonText,
+            dailyData.manDayByPerson,
           );
           break;
       }
@@ -146,22 +154,40 @@ export class NotionService {
     }
   }
 
-  createWeeklyReportPage(
+  /**
+   * 주간 보고서 페이지를 생성한다
+   * @param title - 보고서 제목
+   * @param date - 보고서 날짜
+   * @param text - 보고서 내용 텍스트
+   * @param manDayText - 공수 요약 텍스트
+   * @param manDayByGroupText - 그룹별 공수 텍스트
+   * @param manDayByPersonText - 인원별 공수 텍스트 (더 이상 사용되지 않음)
+   * @param manDayByPerson - 인원별 상세 공수 및 보고서 정보
+   * @returns 생성된 Notion 페이지
+   */
+  async createWeeklyReportPage(
     title: string,
     date: string,
     text: string,
     manDayText: string,
     manDayByGroupText: string,
     manDayByPersonText: string,
+    manDayByPerson?: ManDayByPersonWithReports[],
   ) {
+    // 기본 내용으로 페이지 생성
     const children: BlockObjectRequest[] = [
       ...createCodeBlocks(text),
       createParagraphBlock(manDayText),
       createParagraphBlock(manDayByGroupText),
-      ...createCodeBlocks(manDayByPersonText),
     ];
 
-    return notionClient.pages.create({
+    // manDayByPerson이 없으면 기존 방식 사용
+    if (!manDayByPerson || manDayByPerson.length === 0) {
+      children.push(...createCodeBlocks(manDayByPersonText));
+    }
+
+    // 페이지 생성
+    const page = await notionClient.pages.create({
       parent: {
         database_id: this.reportDatabaseId,
       },
@@ -171,16 +197,37 @@ export class NotionService {
       properties: createPageProperties(title, date),
       children,
     });
+
+    // manDayByPerson 블록을 별도로 추가
+    if (manDayByPerson && manDayByPerson.length > 0) {
+      const manDayBlocks = createManDayByPersonBlocks(manDayByPerson);
+      await this.appendBlocksToPage(page.id, manDayBlocks);
+    }
+
+    return page;
   }
 
-  createDailyReportPage(
+  /**
+   * 일일 보고서 페이지를 생성한다
+   * @param title - 보고서 제목
+   * @param date - 보고서 날짜
+   * @param text - 보고서 내용 텍스트
+   * @param manDayText - 공수 요약 텍스트
+   * @param manDayByGroupText - 그룹별 공수 텍스트
+   * @param manDayByPersonText - 인원별 공수 텍스트 (더 이상 사용되지 않음)
+   * @param manDayByPerson - 인원별 상세 공수 및 보고서 정보
+   * @returns 생성된 Notion 페이지
+   */
+  async createDailyReportPage(
     title: string,
     date: string,
     text: string,
     manDayText: string,
     manDayByGroupText?: string,
     manDayByPersonText?: string,
+    manDayByPerson?: ManDayByPersonWithReports[],
   ) {
+    // 기본 내용으로 페이지 생성
     const children: BlockObjectRequest[] = [
       ...createCodeBlocks(text),
       createParagraphBlock(manDayText),
@@ -190,11 +237,15 @@ export class NotionService {
       children.push(createParagraphBlock(manDayByGroupText));
     }
 
-    if (manDayByPersonText) {
-      children.push(...createCodeBlocks(manDayByPersonText));
+    // manDayByPerson이 없으면 기존 방식 사용
+    if (!manDayByPerson || manDayByPerson.length === 0) {
+      if (manDayByPersonText) {
+        children.push(...createCodeBlocks(manDayByPersonText));
+      }
     }
 
-    return notionClient.pages.create({
+    // 페이지 생성
+    const page = await notionClient.pages.create({
       parent: {
         database_id: this.reportDatabaseId,
       },
@@ -204,6 +255,14 @@ export class NotionService {
       properties: createPageProperties(title, date),
       children,
     });
+
+    // manDayByPerson 블록을 별도로 추가
+    if (manDayByPerson && manDayByPerson.length > 0) {
+      const manDayBlocks = createManDayByPersonBlocks(manDayByPerson);
+      await this.appendBlocksToPage(page.id, manDayBlocks);
+    }
+
+    return page;
   }
 
   /**
@@ -213,25 +272,26 @@ export class NotionService {
    * @param texts - 보고서 내용 배열
    * @param manDayText - 인원별 공수 텍스트
    * @param manDayByGroupText - 그룹별 공수 텍스트
-   * @param manDayByPersonTexts - 인원별 공수 정보 문자열 배열
+   * @param manDayByPerson - 인원별 상세 공수 및 보고서 정보
    * @returns 생성된 Notion 페이지
    */
-  createMonthlyReportPage(
+  async createMonthlyReportPage(
     title: string,
     date: string,
     texts: string[],
     manDayText: string,
     manDayByGroupText: string,
-    manDayByPersonTexts: string[],
+    manDayByPerson?: ManDayByPersonWithReports[],
   ) {
+    // 기본 내용으로 페이지 생성
     const children: BlockObjectRequest[] = [
       ...createMultipleCodeBlocks(texts),
       createParagraphBlock(manDayText),
       createParagraphBlock(manDayByGroupText),
-      ...createMultipleCodeBlocks(manDayByPersonTexts),
     ];
 
-    return notionClient.pages.create({
+    // 페이지 생성
+    const page = await notionClient.pages.create({
       parent: {
         database_id: this.reportDatabaseId,
       },
@@ -241,5 +301,40 @@ export class NotionService {
       properties: createPageProperties(title, date),
       children,
     });
+
+    // manDayByPerson 블록을 별도로 추가
+    if (manDayByPerson && manDayByPerson.length > 0) {
+      const manDayBlocks = createManDayByPersonBlocks(manDayByPerson);
+      await this.appendBlocksToPage(page.id, manDayBlocks);
+    }
+
+    return page;
+  }
+
+  /**
+   * 페이지에 블록들을 추가한다 (100개 제한 대응)
+   * @param pageId - 블록을 추가할 페이지 ID
+   * @param blocks - 추가할 블록 배열
+   * @returns append 완료 여부
+   */
+  async appendBlocksToPage(pageId: string, blocks: BlockObjectRequest[]): Promise<void> {
+    if (!blocks || blocks.length === 0) {
+      return;
+    }
+
+    try {
+      // 블록을 100개씩 청크로 나누어 처리
+      const blockChunks = chunkBlocks(blocks, 100);
+      
+      for (const chunk of blockChunks) {
+        await notionClient.blocks.children.append({
+          block_id: pageId,
+          children: chunk,
+        });
+      }
+    } catch (error) {
+      console.error('블록 추가 중 오류 발생:', error);
+      throw error;
+    }
   }
 }

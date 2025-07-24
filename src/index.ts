@@ -20,16 +20,16 @@ async function generateAndSaveReports(): Promise<void> {
     console.log(`${today} 날짜의 보고서를 생성합니다.`);
 
     // 특정 날짜의 포맷된 보고서 데이터 조회
-    const formattedReports = await reportService.getReportData(today);
+    const reportData = await reportService.getReportData(today);
 
-    // 휴일 체크 (formattedReports가 null인 경우)
-    if (!formattedReports) {
+    // 휴일 체크 (reportData가 null인 경우)
+    if (!reportData) {
       console.log('오늘은 휴일이므로 보고서가 생성되지 않았습니다.');
       return;
     }
 
     // 보고서 데이터를 Notion에 저장
-    await saveReportsToNotion(notionService, formattedReports, today);
+    await saveReportsToNotion(notionService, reportData, today);
   } catch (error) {
     console.error('보고서 생성 중 오류가 발생했습니다:', error);
     throw error; // 상위 호출자가 오류를 처리할 수 있도록 다시 던짐

@@ -96,13 +96,22 @@ export class ReportAggregationService {
       return personA.localeCompare(personB);
     });
 
-    // 각 멤버의 보고서를 manDay 기준으로 정렬
+    // 각 멤버의 보고서를 group, progressRate 기준으로 정렬
     return sortedEntries.map(([person, reports]) => [
       person,
       [...reports].sort((a, b) => {
-        const manDayA = a.manDay ?? 0;
-        const manDayB = b.manDay ?? 0;
-        return manDayB - manDayA;
+        // 1. group 값 오름차순 비교
+        const groupA = a.group ?? '';
+        const groupB = b.group ?? '';
+        
+        if (groupA !== groupB) {
+          return groupA.localeCompare(groupB);
+        }
+        
+        // 2. group이 같으면 progressRate 값 내림차순 비교
+        const progressRateA = a.progressRate ?? 0;
+        const progressRateB = b.progressRate ?? 0;
+        return progressRateB - progressRateA;
       }),
     ]);
   }

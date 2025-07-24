@@ -29,20 +29,9 @@ export function formatDateToYYYYMMDD(date: Date): string {
  */
 export function getToday(): string {
   const now = new Date();
-  // return formatDateToYYYYMMDD(now);
+  return formatDateToYYYYMMDD(now);
   // 테스트용 고정 날짜는 주석 처리
-  return '2025-07-22';
-}
-
-/**
- * 주어진 날짜의 다음 날을 YYYY-MM-DD 형식으로 반환
- * @param dateString - YYYY-MM-DD 형식의 날짜 문자열
- * @returns YYYY-MM-DD 형식의 날짜 문자열
- */
-export function getNextDay(dateString: string): string {
-  const currentDate = new Date(dateString);
-  currentDate.setDate(currentDate.getDate() + 1);
-  return formatDateToYYYYMMDD(currentDate);
+  // return '2025-07-22';
 }
 
 /**
@@ -78,16 +67,14 @@ export function getWeekOfMonth(dateString: string): string {
 export function getCurrentMonthRange(): { firstDay: string; lastDay: string } {
   const now = new Date();
   const dayOfWeek = now.getDay(); // 0: 일요일, 1: 월요일, ..., 6: 토요일
-  
+
   // 가장 최근 지난 수요일까지의 일수 계산
   // 수요일은 3, 오늘이 수요일이면 0, 수요일 이후면 (7 - (dayOfWeek - 3))
-  const daysSinceLastWednesday = dayOfWeek >= 3 
-    ? dayOfWeek - 3 
-    : dayOfWeek + 4; // 일(0), 월(1), 화(2)는 이전 주 수요일까지의 일수
-  
+  const daysSinceLastWednesday = dayOfWeek >= 3 ? dayOfWeek - 3 : dayOfWeek + 4; // 일(0), 월(1), 화(2)는 이전 주 수요일까지의 일수
+
   const lastWednesday = new Date(now);
   lastWednesday.setDate(now.getDate() - daysSinceLastWednesday);
-  
+
   return getMonthRange(lastWednesday);
 }
 
@@ -96,7 +83,7 @@ export function getCurrentMonthRange(): { firstDay: string; lastDay: string } {
  * @param date - 기준 날짜
  * @returns 해당 달의 첫날과 마지막 날
  */
-export function getMonthRange(date: Date): {
+function getMonthRange(date: Date): {
   firstDay: string;
   lastDay: string;
 } {
@@ -110,23 +97,32 @@ export function getMonthRange(date: Date): {
 }
 
 /**
- * 주어진 날짜가 해당 월의 마지막 주 금요일인지 확인
+ * 주어진 날짜가 해당 월의 마지막 주인지 확인 (강제 플래그 포함)
  * @param date - 확인할 날짜
- * @returns 마지막 주 금요일 여부
+ * @param forceFlag - true일 경우 금요일 체크를 건너뛰고 마지막 주차 여부만 확인
+ * @returns 마지막 주 금요일 또는 마지막 주차 여부
  */
-export function isLastFridayOfMonth(date: Date): boolean {
+export function isLastFridayOfMonth(date: Date, forceFlag?: boolean): boolean {
+  // forceFlag가 true인 경우 무조건 true 반환
+  if (forceFlag === true) {
+    return true;
+  }
+
   // 현재 날짜가 금요일인지 확인 (금요일 = 5)
   if (date.getDay() !== 5) {
     return false;
   }
 
-  // 이번 주 수요일 계산 (현재 날짜 - 2일)
-  const thisWednesday = new Date(date);
-  thisWednesday.setDate(date.getDate() - 2);
+  // 이번 주 수요일 계산 (현재 날짜에서 해당 주의 수요일까지의 거리)
+  const dayOfWeek = date.getDay(); // 0: 일요일, 1: 월요일, ..., 6: 토요일
+  const daysToWednesday = dayOfWeek >= 3 ? dayOfWeek - 3 : dayOfWeek + 4;
 
-  // 다음 주 수요일의 날짜 계산 (현재 날짜 + 5일)
-  const nextWednesday = new Date(date);
-  nextWednesday.setDate(date.getDate() + 5);
+  const thisWednesday = new Date(date);
+  thisWednesday.setDate(date.getDate() - daysToWednesday);
+
+  // 다음 주 수요일의 날짜 계산 (이번 주 수요일 + 7일)
+  const nextWednesday = new Date(thisWednesday);
+  nextWednesday.setDate(thisWednesday.getDate() + 7);
 
   // 이번 주 수요일과 다음 주 수요일의 월 비교
   const thisWednesdayMonth = thisWednesday.getMonth();

@@ -124,6 +124,7 @@ export interface ReportDailyData extends ReportForm {
   manDayText: string;
   manDayByGroupText?: string;
   manDayByPersonText?: string;
+  manDayByPerson?: ManDayByPersonWithReports[];
 }
 
 // 주간 보고서 데이터
@@ -140,7 +141,8 @@ export interface ReportMonthlyData extends ReportWeeklyData {
   texts: string[];
   text?: string;
   manDayByPersonText?: string;
-  manDayByPersonTexts: string[]; // 인원별 공수 정보 문자열 배열
+  // manDayByPersonTexts: string[]; // 인원별 공수 정보 문자열 배열
+  manDayByPerson?: ManDayByPersonWithReports[];
 }
 
 // 전체 보고서 데이터

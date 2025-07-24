@@ -16,41 +16,14 @@ export function calculateManDayByGroup(reports: DailyReport[]): Record<string, n
   }, {} as Record<string, number>);
 }
 
-/**
- * 보고서 배열에서 담당자별 공수를 계산한다
- * @param reports - 일일 보고서 데이터 배열
- * @returns 담당자별 공수 합계 객체
- */
-export function calculateManDayByPerson(reports: DailyReport[]): Record<string, number> {
-  return reports.reduce((acc, report) => {
-    acc[report.person] = (acc[report.person] ?? 0) + report.manDay;
-    return acc;
-  }, {} as Record<string, number>);
-}
 
-/**
- * 보고서 배열에서 특정 키별 공수를 계산한다 (범용 함수)
- * @param reports - 일일 보고서 데이터 배열
- * @param keyExtractor - 키를 추출하는 함수
- * @returns 키별 공수 합계 객체
- */
-export function calculateManDayByKey(
-  reports: DailyReport[], 
-  keyExtractor: (report: DailyReport) => string
-): Record<string, number> {
-  return reports.reduce((acc, report) => {
-    const key = keyExtractor(report);
-    acc[key] = (acc[key] ?? 0) + report.manDay;
-    return acc;
-  }, {} as Record<string, number>);
-}
 
 /**
  * 보고서 아이템의 제목을 포맷한다
  * @param item - 보고서 아이템
  * @returns 포맷된 제목 (customer가 있으면 [customer] title 형태)
  */
-export function formatReportTitle(item: DailyReportItem): string {
+function formatReportTitle(item: DailyReportItem): string {
   return item.customer ? `[${item.customer}] ${item.title}` : item.title;
 }
 
@@ -60,7 +33,7 @@ export function formatReportTitle(item: DailyReportItem): string {
  * @param includeProgress - 진행률 포함 여부
  * @returns 진행률 텍스트 (포함하지 않으면 빈 문자열)
  */
-export function formatProgressText(progressRate: number, includeProgress: boolean = true): string {
+function formatProgressText(progressRate: number, includeProgress: boolean = true): string {
   return includeProgress ? `, ${progressRate}%` : '';
 }
 
