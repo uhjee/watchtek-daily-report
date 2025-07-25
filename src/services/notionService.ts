@@ -334,7 +334,7 @@ export class NotionService {
 
     // manDayByPerson 블록을 별도로 추가
     if (manDayByPerson && manDayByPerson.length > 0) {
-      const manDayBlocks = createManDayByPersonBlocks(manDayByPerson);
+      const manDayBlocks = createManDayByPersonBlocks(manDayByPerson, '[월간 인원별 공수]');
       await this.appendBlocksToPage(page.id, manDayBlocks);
     }
 

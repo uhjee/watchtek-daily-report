@@ -57,14 +57,14 @@ export function formatReportItemText(item: DailyReportItem, includeProgress: boo
  */
 export function formatReportGroupTitle(reportType: string, isWeekly: boolean = false): string {
   if (isWeekly) {
-    return reportType === '진행업무' ? '****금주 진행 사항****' : '****차주 계획 사항****';
+    return reportType === '진행업무' ? '금주 진행 사항' : '차주 계획 사항';
   }
   
   const titleMap: Record<string, string> = {
-    '진행업무': '****업무 진행 사항****',
-    '예정업무': '****업무 계획 사항****',
-    '완료업무': '****완료된 업무****',
+    '진행업무': '업무 진행 사항',
+    '예정업무': '업무 계획 사항',
+    '완료업무': '완료된 업무',
   };
   
-  return titleMap[reportType] || `****${reportType}****`;
+  return titleMap[reportType] || `${reportType}`;
 }

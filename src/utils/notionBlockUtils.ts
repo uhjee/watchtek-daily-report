@@ -61,9 +61,13 @@ export function createParagraphBlock(text: string): BlockObjectRequest {
 /**
  * heading_2 블록을 생성한다
  * @param text - 제목 텍스트
+ * @param color - 텍스트 색상 (선택사항)
  * @returns heading_2 블록
  */
-export function createHeading2Block(text: string): BlockObjectRequest {
+export function createHeading2Block(
+  text: string,
+  color?: string,
+): BlockObjectRequest {
   return {
     object: 'block' as const,
     type: 'heading_2' as const,
@@ -74,6 +78,16 @@ export function createHeading2Block(text: string): BlockObjectRequest {
           text: {
             content: text,
           },
+          annotations: color
+            ? {
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                underline: false,
+                code: false,
+                color: color as any,
+              }
+            : undefined,
         },
       ],
     },
@@ -158,7 +172,48 @@ export function createTableRowBlock(cells: string[]): BlockObjectRequest {
   };
 }
 
+/**
+ * 테이블 셀 데이터 타입 (텍스트 또는 하이퍼링크 포함)
+ */
+export type TableCellData = string | { text: string; link?: string };
 
+/**
+ * 하이퍼링크를 지원하는 테이블 행(table_row) 블록을 생성한다
+ * @param cells - 각 셀의 데이터 배열 (문자열 또는 {text, link} 객체)
+ * @returns table_row 블록
+ */
+export function createTableRowBlockWithLinks(cells: TableCellData[]): BlockObjectRequest {
+  return {
+    object: 'block' as const,
+    type: 'table_row' as const,
+    table_row: {
+      cells: cells.map((cellData) => {
+        if (typeof cellData === 'string') {
+          // 단순 텍스트인 경우
+          return [
+            {
+              type: 'text' as const,
+              text: {
+                content: cellData,
+              },
+            },
+          ];
+        } else {
+          // 하이퍼링크가 포함된 경우
+          return [
+            {
+              type: 'text' as const,
+              text: {
+                content: cellData.text,
+                link: cellData.link ? { url: cellData.link } : undefined,
+              },
+            },
+          ];
+        }
+      }),
+    },
+  };
+}
 
 /**
  * 테이블 헤더와 데이터 행들을 생성한다
@@ -188,9 +243,34 @@ export function createTableWithRows(
   };
 }
 
+/**
+ * 하이퍼링크를 지원하는 테이블을 생성한다
+ * @param data - 테이블 데이터 (각 행은 TableCellData 배열)
+ * @param hasColumnHeader - 컬럼 헤더 여부
+ * @returns table 블록
+ */
+export function createTableWithLinksAndRows(
+  data: TableCellData[][],
+  hasColumnHeader: boolean = true,
+): BlockObjectRequest {
+  if (!data || data.length === 0) {
+    throw new Error('테이블 데이터가 비어있습니다');
+  }
 
+  const columnCount = data[0]?.length || 1;
+  const tableRows = data.map((row) => createTableRowBlockWithLinks(row));
 
-
+  return {
+    object: 'block' as const,
+    type: 'table' as const,
+    table: {
+      table_width: columnCount,
+      has_column_header: hasColumnHeader,
+      has_row_header: false,
+      children: tableRows as any, // Notion API 타입 이슈 회피
+    },
+  };
+}
 
 /**
  * 블록 배열을 지정된 크기의 청크로 나눈다 (Notion API 제한 대응)
@@ -198,7 +278,10 @@ export function createTableWithRows(
  * @param chunkSize - 청크 크기 (기본값: 100)
  * @returns 청크로 나뉜 블록 배열들의 배열
  */
-export function chunkBlocks(blocks: BlockObjectRequest[], chunkSize: number = 100): BlockObjectRequest[][] {
+export function chunkBlocks(
+  blocks: BlockObjectRequest[],
+  chunkSize: number = 100,
+): BlockObjectRequest[][] {
   const chunks: BlockObjectRequest[][] = [];
   for (let i = 0; i < blocks.length; i += chunkSize) {
     chunks.push(blocks.slice(i, i + chunkSize));
@@ -234,16 +317,18 @@ export function createPageProperties(title: string, date: string) {
 /**
  * 인원별 상세 공수 정보 블록들을 생성한다 (테이블 형태)
  * @param manDayByPerson - 인원별 공수 및 보고서 정보 배열
+ * @param sectionTitle - 섹션 제목 (기본값: '[일주일 인원별 공수]')
  * @returns 인원별 상세 공수 블록 배열
  */
 export function createManDayByPersonBlocks(
   manDayByPerson: ManDayByPersonWithReports[],
+  sectionTitle: string = '[일주일 인원별 공수]',
 ): BlockObjectRequest[] {
   const blocks: BlockObjectRequest[] = [];
 
   if (manDayByPerson && manDayByPerson.length > 0) {
     // 섹션 제목 추가
-    blocks.push(createHeading2Block('[일주일 인원별 공수]'));
+    blocks.push(createHeading2Block(sectionTitle));
 
     // 각 인원별로 상세 정보 블록 추가
     manDayByPerson.forEach((personData) => {
@@ -259,7 +344,7 @@ export function createManDayByPersonBlocks(
       // 보고서가 있는 경우에만 테이블 생성
       if (filteredReports.length > 0) {
         // 테이블 헤더
-        const tableHeader = [
+        const tableHeader: TableCellData[] = [
           '번호',
           'PMS 관리 번호',
           '타이틀',
@@ -268,21 +353,23 @@ export function createManDayByPersonBlocks(
           '공수(m/d)',
         ];
 
-        // 테이블 데이터 생성
-        const tableData = [
-          tableHeader,
-          ...filteredReports.map((report, index) => [
-            `${index + 1}`,
-            getPmsNumberAfterEmptyCheck(report.pmsNumber),
-            report.title || '',
-            report.group || '',
-            `${report.progressRate}%`,
-            `${report.manDay}`,
-          ]),
-        ];
+        // 테이블 데이터 생성 (PmsLink 활용)
+        const tableDataRows: TableCellData[][] = filteredReports.map((report, index) => [
+          `${index + 1}`,
+          // PmsLink가 있으면 하이퍼링크로, 없으면 일반 텍스트로
+          report.pmsLink && report.pmsNumber
+            ? { text: getPmsNumberAfterEmptyCheck(report.pmsNumber), link: report.pmsLink }
+            : getPmsNumberAfterEmptyCheck(report.pmsNumber),
+          cleanTitle(report.title || ''),
+          report.group || '',
+          `${report.progressRate}%`,
+          `${report.manDay}`,
+        ]);
 
-        // 테이블 블록 추가
-        const tableBlock = createTableWithRows(tableData, true);
+        const tableData: TableCellData[][] = [tableHeader, ...tableDataRows];
+
+        // 하이퍼링크를 지원하는 테이블 블록 추가
+        const tableBlock = createTableWithLinksAndRows(tableData, true);
         blocks.push(tableBlock);
       }
     });
@@ -319,38 +406,47 @@ export function createHeading1Block(text: string): BlockObjectRequest {
  * @param isFirstLine - 첫 번째 라인 여부
  * @returns 블록 타입과 정리된 텍스트
  */
-function analyzeLineType(line: string, isFirstLine: boolean): { type: string; cleanText: string } {
+function analyzeLineType(
+  line: string,
+  isFirstLine: boolean,
+): { type: string; cleanText: string } {
   const trimmedLine = line.trim();
-  
+
   if (!trimmedLine) {
     return { type: 'empty', cleanText: '' };
   }
-  
+
   if (isFirstLine) {
     return { type: 'heading_1', cleanText: trimmedLine };
   }
-  
+
   // ****텍스트**** 패턴 (Heading 2)
   if (/^\*{4}.*\*{4}$/.test(trimmedLine)) {
-    const cleanText = trimmedLine.replace(/^\*{4}/, '').replace(/\*{4}$/, '').trim();
+    const cleanText = trimmedLine
+      .replace(/^\*{4}/, '')
+      .replace(/\*{4}$/, '')
+      .trim();
     return { type: 'heading_2', cleanText };
   }
-  
+
   // 숫자. 텍스트 패턴 (Heading 3 - Group)
   if (/^\d+\.\s/.test(trimmedLine)) {
     return { type: 'heading_3', cleanText: trimmedLine };
   }
-  
+
   // [텍스트] 패턴 (Paragraph - Sub Group)
   if (/^\[.*\]$/.test(trimmedLine)) {
     return { type: 'paragraph', cleanText: trimmedLine };
   }
-  
+
   // - 텍스트 패턴 (Bulleted List Item)
   if (/^-\s/.test(trimmedLine)) {
-    return { type: 'bulleted_list_item', cleanText: trimmedLine.substring(2).trim() };
+    return {
+      type: 'bulleted_list_item',
+      cleanText: trimmedLine.substring(2).trim(),
+    };
   }
-  
+
   // 기타 (Paragraph)
   return { type: 'paragraph', cleanText: trimmedLine };
 }
@@ -364,17 +460,17 @@ export function createWeeklyReportBlocks(text: string): BlockObjectRequest[] {
   if (!text || !text.trim()) {
     return [];
   }
-  
+
   const lines = text.split('\n');
   const blocks: BlockObjectRequest[] = [];
-  
+
   lines.forEach((line, index) => {
     const { type, cleanText } = analyzeLineType(line, index === 0);
-    
+
     if (type === 'empty') {
       return; // 빈 라인은 건너뛰기
     }
-    
+
     switch (type) {
       case 'heading_1':
         blocks.push(createHeading1Block(cleanText));
@@ -396,11 +492,9 @@ export function createWeeklyReportBlocks(text: string): BlockObjectRequest[] {
         break;
     }
   });
-  
+
   return blocks;
 }
-
-
 
 /**
  * PMS 번호를 반환한다. 없을 경우 빈 문자열 반환
@@ -412,6 +506,22 @@ function getPmsNumberAfterEmptyCheck(pmsNumber: number | undefined): string {
     return '';
   }
   return '#' + pmsNumber.toString();
+}
+
+/**
+ * 타이틀에서 불필요한 접두사를 제거한다
+ * @param title - 원본 타이틀
+ * @returns 정리된 타이틀
+ */
+function cleanTitle(title: string): string {
+  if (!title) return '';
+  
+  // "#-" 접두사 제거
+  if (title.startsWith('#-')) {
+    return title.substring(2).trim();
+  }
+  
+  return title;
 }
 
 /**
@@ -431,13 +541,11 @@ export function createWeeklyReportBlocksFromData(
   const title = `${weekOfMonth} 큐브 파트 주간업무 보고`;
   blocks.push(createHeading1Block(title));
 
-  // 각 그룹(진행업무/예정업무)에 대해 처리
-  groupedReports.forEach((reportGroup) => {
-    // 그룹 제목 (Heading 2) - ****로 감싸진 형태
-    const groupTitle = formatReportGroupTitle(reportGroup.type, true);
-    // ****를 제거하고 Heading 2로 변환
-    const cleanGroupTitle = groupTitle.replace(/^\*{4}/, '').replace(/\*{4}$/, '').trim();
-    blocks.push(createHeading2Block(cleanGroupTitle));
+      // 각 그룹(진행업무/예정업무)에 대해 처리
+    groupedReports.forEach((reportGroup) => {
+      // 그룹 제목 (Heading 2)
+      const groupTitle = formatReportGroupTitle(reportGroup.type, true);
+      blocks.push(createHeading2Block(groupTitle, 'yellow_background'));
 
     // 각 업무 그룹 처리
     reportGroup.groups.forEach((group, groupIndex) => {
@@ -456,7 +564,9 @@ export function createWeeklyReportBlocksFromData(
           const includeProgress = reportGroup.type === '진행업무';
           const itemText = formatReportItemText(item, includeProgress);
           // "- " 접두사 제거 (formatReportItemText에서 이미 포함됨)
-          const cleanItemText = itemText.startsWith('- ') ? itemText.substring(2) : itemText;
+          const cleanItemText = itemText.startsWith('- ')
+            ? itemText.substring(2)
+            : itemText;
           blocks.push(createBulletedListItemBlock(cleanItemText));
         });
       });
@@ -494,13 +604,13 @@ export function createMonthlyReportBlocksFromData(
       완료업무: '완료된 업무',
     };
     const groupTitle = titleMap[reportGroup.type] || reportGroup.type;
-    
+
     // 완료된 업무 섹션 전에 divider 추가
     if (groupTitle === '완료된 업무') {
       blocks.push(createDividerBlock());
     }
-    
-    blocks.push(createHeading2Block(groupTitle));
+
+    blocks.push(createHeading2Block(groupTitle, 'yellow_background'));
 
     // 각 업무 그룹 처리
     reportGroup.groups.forEach((group, groupIndex) => {
@@ -519,7 +629,9 @@ export function createMonthlyReportBlocksFromData(
           // 월간 보고서는 항상 진행률 포함
           const itemText = formatReportItemText(item, true);
           // "- " 접두사 제거 (formatReportItemText에서 이미 포함됨)
-          const cleanItemText = itemText.startsWith('- ') ? itemText.substring(2) : itemText;
+          const cleanItemText = itemText.startsWith('- ')
+            ? itemText.substring(2)
+            : itemText;
           blocks.push(createBulletedListItemBlock(cleanItemText));
         });
       });

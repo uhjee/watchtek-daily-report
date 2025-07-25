@@ -326,7 +326,7 @@ export class ReportService {
   }
 
   /**
-   * Notion API로부터 받은 보고서 데이터를 원하는 형식으로 변환합니다
+   * Notion API 응답 데이터를 일일 보고서 형식으로 변환한다
    * @param reports - Notion API 응답 데이터
    * @returns 포맷된 보고서 데이터
    */
@@ -349,6 +349,7 @@ export class ReportService {
       isTomorrow: report.properties.isTomorrow.formula['boolean'] ?? false,
       manDay: report.properties.ManDay.number ?? 0,
       pmsNumber: report.properties.PmsNumber?.number,
+      pmsLink: report.properties.PmsLink?.formula?.string,
     }));
   }
 
