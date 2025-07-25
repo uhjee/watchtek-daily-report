@@ -125,6 +125,18 @@ export function createBulletedListItemBlock(text: string): BlockObjectRequest {
 }
 
 /**
+ * divider 블록을 생성한다
+ * @returns divider 블록
+ */
+export function createDividerBlock(): BlockObjectRequest {
+  return {
+    object: 'block' as const,
+    type: 'divider' as const,
+    divider: {},
+  };
+}
+
+/**
  * 테이블 행(table_row) 블록을 생성한다
  * @param cells - 각 셀의 텍스트 배열
  * @returns table_row 블록
@@ -482,6 +494,12 @@ export function createMonthlyReportBlocksFromData(
       완료업무: '완료된 업무',
     };
     const groupTitle = titleMap[reportGroup.type] || reportGroup.type;
+    
+    // 완료된 업무 섹션 전에 divider 추가
+    if (groupTitle === '완료된 업무') {
+      blocks.push(createDividerBlock());
+    }
+    
     blocks.push(createHeading2Block(groupTitle));
 
     // 각 업무 그룹 처리
