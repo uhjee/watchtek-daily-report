@@ -1,6 +1,8 @@
 import { BlockObjectRequest } from '@notionhq/client/build/src/api-endpoints';
 import { splitTextIntoChunks } from './stringUtils';
-import { ManDayByPersonWithReports } from '../types/report.d';
+import { ManDayByPersonWithReports, DailyReportGroup } from '../types/report.d';
+import { getWeekOfMonth } from './dateUtils';
+import { formatReportGroupTitle, formatReportItemText } from './reportUtils';
 
 /**
  * Notion 블록 생성 관련 유틸리티 함수들
@@ -176,23 +178,7 @@ export function createTableWithRows(
 
 
 
-/**
- * 여러 텍스트로부터 코드 블록들을 생성한다
- * @param texts - 텍스트 배열
- * @param language - 코드 언어 (기본값: javascript)
- * @returns 모든 코드 블록 배열
- */
-export function createMultipleCodeBlocks(
-  texts: string[],
-  language: any = 'javascript',
-): BlockObjectRequest[] {
-  const allBlocks: BlockObjectRequest[] = [];
-  texts.forEach((text) => {
-    const blocks = createCodeBlocks(text, language);
-    allBlocks.push(...blocks);
-  });
-  return allBlocks;
-}
+
 
 /**
  * 블록 배열을 지정된 크기의 청크로 나눈다 (Notion API 제한 대응)
@@ -294,6 +280,117 @@ export function createManDayByPersonBlocks(
 }
 
 /**
+ * heading_1 블록을 생성한다
+ * @param text - 제목 텍스트
+ * @returns heading_1 블록
+ */
+export function createHeading1Block(text: string): BlockObjectRequest {
+  return {
+    object: 'block' as const,
+    type: 'heading_1' as const,
+    heading_1: {
+      rich_text: [
+        {
+          type: 'text' as const,
+          text: {
+            content: text,
+          },
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * 텍스트 라인의 타입을 판별한다
+ * @param line - 판별할 텍스트 라인
+ * @param isFirstLine - 첫 번째 라인 여부
+ * @returns 블록 타입과 정리된 텍스트
+ */
+function analyzeLineType(line: string, isFirstLine: boolean): { type: string; cleanText: string } {
+  const trimmedLine = line.trim();
+  
+  if (!trimmedLine) {
+    return { type: 'empty', cleanText: '' };
+  }
+  
+  if (isFirstLine) {
+    return { type: 'heading_1', cleanText: trimmedLine };
+  }
+  
+  // ****텍스트**** 패턴 (Heading 2)
+  if (/^\*{4}.*\*{4}$/.test(trimmedLine)) {
+    const cleanText = trimmedLine.replace(/^\*{4}/, '').replace(/\*{4}$/, '').trim();
+    return { type: 'heading_2', cleanText };
+  }
+  
+  // 숫자. 텍스트 패턴 (Heading 3 - Group)
+  if (/^\d+\.\s/.test(trimmedLine)) {
+    return { type: 'heading_3', cleanText: trimmedLine };
+  }
+  
+  // [텍스트] 패턴 (Paragraph - Sub Group)
+  if (/^\[.*\]$/.test(trimmedLine)) {
+    return { type: 'paragraph', cleanText: trimmedLine };
+  }
+  
+  // - 텍스트 패턴 (Bulleted List Item)
+  if (/^-\s/.test(trimmedLine)) {
+    return { type: 'bulleted_list_item', cleanText: trimmedLine.substring(2).trim() };
+  }
+  
+  // 기타 (Paragraph)
+  return { type: 'paragraph', cleanText: trimmedLine };
+}
+
+/**
+ * Weekly report 텍스트를 구조화된 Notion 블록들로 변환한다
+ * @param text - Weekly report 텍스트
+ * @returns 구조화된 블록 배열
+ */
+export function createWeeklyReportBlocks(text: string): BlockObjectRequest[] {
+  if (!text || !text.trim()) {
+    return [];
+  }
+  
+  const lines = text.split('\n');
+  const blocks: BlockObjectRequest[] = [];
+  
+  lines.forEach((line, index) => {
+    const { type, cleanText } = analyzeLineType(line, index === 0);
+    
+    if (type === 'empty') {
+      return; // 빈 라인은 건너뛰기
+    }
+    
+    switch (type) {
+      case 'heading_1':
+        blocks.push(createHeading1Block(cleanText));
+        break;
+      case 'heading_2':
+        blocks.push(createHeading2Block(cleanText));
+        break;
+      case 'heading_3':
+        blocks.push(createHeading3Block(cleanText));
+        break;
+      case 'paragraph':
+        blocks.push(createParagraphBlock(cleanText));
+        break;
+      case 'bulleted_list_item':
+        blocks.push(createBulletedListItemBlock(cleanText));
+        break;
+      default:
+        blocks.push(createParagraphBlock(cleanText));
+        break;
+    }
+  });
+  
+  return blocks;
+}
+
+
+
+/**
  * PMS 번호를 반환한다. 없을 경우 빈 문자열 반환
  * @param pmsNumber - PMS 번호
  * @returns 포맷된 PMS 번호 문자열
@@ -303,4 +400,113 @@ function getPmsNumberAfterEmptyCheck(pmsNumber: number | undefined): string {
     return '';
   }
   return '#' + pmsNumber.toString();
+}
+
+/**
+ * Weekly report의 구조화된 데이터에서 직접 Notion 블록들을 생성한다
+ * @param groupedReports - 포맷된 보고서 데이터
+ * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
+ * @returns 구조화된 블록 배열
+ */
+export function createWeeklyReportBlocksFromData(
+  groupedReports: DailyReportGroup[],
+  date: string,
+): BlockObjectRequest[] {
+  const blocks: BlockObjectRequest[] = [];
+  const weekOfMonth = getWeekOfMonth(date);
+
+  // 제목 (Heading 1)
+  const title = `${weekOfMonth} 큐브 파트 주간업무 보고`;
+  blocks.push(createHeading1Block(title));
+
+  // 각 그룹(진행업무/예정업무)에 대해 처리
+  groupedReports.forEach((reportGroup) => {
+    // 그룹 제목 (Heading 2) - ****로 감싸진 형태
+    const groupTitle = formatReportGroupTitle(reportGroup.type, true);
+    // ****를 제거하고 Heading 2로 변환
+    const cleanGroupTitle = groupTitle.replace(/^\*{4}/, '').replace(/\*{4}$/, '').trim();
+    blocks.push(createHeading2Block(cleanGroupTitle));
+
+    // 각 업무 그룹 처리
+    reportGroup.groups.forEach((group, groupIndex) => {
+      // Group 제목 (Heading 3) - numbering 포함
+      const groupHeading = `${groupIndex + 1}. ${group.group}`;
+      blocks.push(createHeading3Block(groupHeading));
+
+      // 각 서브그룹 처리
+      group.subGroups.forEach((subGroup) => {
+        // 서브그룹 제목 (Paragraph) - [서브그룹명] 형태
+        const subGroupTitle = `[${subGroup.subGroup}]`;
+        blocks.push(createParagraphBlock(subGroupTitle));
+
+        // 각 아이템을 Bulleted List로 추가
+        subGroup.items.forEach((item) => {
+          const includeProgress = reportGroup.type === '진행업무';
+          const itemText = formatReportItemText(item, includeProgress);
+          // "- " 접두사 제거 (formatReportItemText에서 이미 포함됨)
+          const cleanItemText = itemText.startsWith('- ') ? itemText.substring(2) : itemText;
+          blocks.push(createBulletedListItemBlock(cleanItemText));
+        });
+      });
+    });
+  });
+
+  return blocks;
+}
+
+/**
+ * Monthly report의 구조화된 데이터에서 직접 Notion 블록들을 생성한다
+ * @param groupedReports - 포맷된 보고서 데이터
+ * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
+ * @returns 구조화된 블록 배열
+ */
+export function createMonthlyReportBlocksFromData(
+  groupedReports: DailyReportGroup[],
+  date: string,
+): BlockObjectRequest[] {
+  const blocks: BlockObjectRequest[] = [];
+  const monthYear = new Date(date).toLocaleDateString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+  });
+
+  // 제목 (Heading 1)
+  const title = `${monthYear} 큐브 파트 월간업무 보고`;
+  blocks.push(createHeading1Block(title));
+
+  // 각 그룹(진행업무/완료업무)에 대해 처리
+  groupedReports.forEach((reportGroup) => {
+    // 그룹 제목 매핑
+    const titleMap: Record<string, string> = {
+      진행업무: '진행 중인 업무',
+      완료업무: '완료된 업무',
+    };
+    const groupTitle = titleMap[reportGroup.type] || reportGroup.type;
+    blocks.push(createHeading2Block(groupTitle));
+
+    // 각 업무 그룹 처리
+    reportGroup.groups.forEach((group, groupIndex) => {
+      // Group 제목 (Heading 3) - numbering 포함
+      const groupHeading = `${groupIndex + 1}. ${group.group}`;
+      blocks.push(createHeading3Block(groupHeading));
+
+      // 각 서브그룹 처리
+      group.subGroups.forEach((subGroup) => {
+        // 서브그룹 제목 (Paragraph) - [서브그룹명] 형태
+        const subGroupTitle = `[${subGroup.subGroup}]`;
+        blocks.push(createParagraphBlock(subGroupTitle));
+
+        // 각 아이템을 Bulleted List로 추가
+        subGroup.items.forEach((item) => {
+          // 월간 보고서는 항상 진행률 포함
+          const itemText = formatReportItemText(item, true);
+          // "- " 접두사 제거 (formatReportItemText에서 이미 포함됨)
+          const cleanItemText = itemText.startsWith('- ') ? itemText.substring(2) : itemText;
+          blocks.push(createBulletedListItemBlock(cleanItemText));
+        });
+      });
+    });
+  });
+
+  return blocks;
 }

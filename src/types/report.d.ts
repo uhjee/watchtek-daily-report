@@ -113,35 +113,27 @@ export interface ReportForm {
   text: string;
 }
 
-// 월간 보고서 형식 (제목과 내용)
-export interface MonthlyReportForm extends ReportForm {
-  texts: string[];
-}
+
 
 // 일일 보고서 데이터
 export interface ReportDailyData extends ReportForm {
   reportType: Extract<ReportType, 'daily'>;
   manDayText: string;
   manDayByGroupText?: string;
-  manDayByPersonText?: string;
   manDayByPerson?: ManDayByPersonWithReports[];
 }
 
 // 주간 보고서 데이터
-export interface ReportWeeklyData extends ReportDailyData {
+export interface ReportWeeklyData extends Omit<ReportDailyData, 'text'> {
   reportType: Extract<ReportType, 'weekly'>;
   manDayByGroupText: string;
-  manDayByPersonText: string;
+  groupedReports: DailyReportGroup[];
 }
 
 // 월간 보고서 데이터
 export interface ReportMonthlyData extends ReportWeeklyData {
   reportType: Extract<ReportType, 'monthly'>;
   isMonthlyReport: boolean;
-  texts: string[];
-  text?: string;
-  manDayByPersonText?: string;
-  // manDayByPersonTexts: string[]; // 인원별 공수 정보 문자열 배열
   manDayByPerson?: ManDayByPersonWithReports[];
 }
 

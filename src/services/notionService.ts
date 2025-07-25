@@ -11,19 +11,23 @@ import {
   ReportMonthlyData,
   ReportDailyData,
   ManDayByPersonWithReports,
+  DailyReportGroup,
 } from '../types/report.d';
 import { splitTextIntoChunks } from '../utils/stringUtils';
 import {
   createCodeBlocks,
   createParagraphBlock,
-  createMultipleCodeBlocks,
   createPageProperties,
   createHeading2Block,
   createHeading3Block,
   createBulletedListItemBlock,
   createManDayByPersonBlocks,
+  createWeeklyReportBlocks,
+  createWeeklyReportBlocksFromData,
+  createMonthlyReportBlocksFromData,
   chunkBlocks,
 } from '../utils/notionBlockUtils';
+import { getWeekOfMonth } from '../utils/dateUtils';
 
 export class NotionService {
   private databaseId: string;
@@ -98,7 +102,7 @@ export class NotionService {
    * @returns 생성된 Notion 페이지
    */
   async createReportPage(reportData: ReportDataForCreatePage, date: string) {
-    const { title, text, manDayText, reportType } = reportData;
+    const { title, manDayText, reportType } = reportData;
 
     try {
       let response;
@@ -110,11 +114,10 @@ export class NotionService {
           response = await this.createWeeklyReportPage(
             title,
             date,
-            text ?? '',
             manDayText,
             weeklyData.manDayByGroupText,
-            weeklyData.manDayByPersonText,
             weeklyData.manDayByPerson,
+            weeklyData.groupedReports,
           );
           break;
 
@@ -124,10 +127,10 @@ export class NotionService {
           response = await this.createMonthlyReportPage(
             title,
             date,
-            monthlyData.texts,
             manDayText,
             monthlyData.manDayByGroupText,
             monthlyData.manDayByPerson,
+            monthlyData.groupedReports,
           );
           break;
 
@@ -138,10 +141,9 @@ export class NotionService {
           response = await this.createDailyReportPage(
             title,
             date,
-            text ?? '',
+            dailyData.text,
             manDayText,
             dailyData.manDayByGroupText,
-            dailyData.manDayByPersonText,
             dailyData.manDayByPerson,
           );
           break;
@@ -158,33 +160,38 @@ export class NotionService {
    * 주간 보고서 페이지를 생성한다
    * @param title - 보고서 제목
    * @param date - 보고서 날짜
-   * @param text - 보고서 내용 텍스트
    * @param manDayText - 공수 요약 텍스트
    * @param manDayByGroupText - 그룹별 공수 텍스트
-   * @param manDayByPersonText - 인원별 공수 텍스트 (더 이상 사용되지 않음)
    * @param manDayByPerson - 인원별 상세 공수 및 보고서 정보
+   * @param groupedReports - 구조화된 보고서 데이터
    * @returns 생성된 Notion 페이지
    */
   async createWeeklyReportPage(
     title: string,
     date: string,
-    text: string,
     manDayText: string,
     manDayByGroupText: string,
-    manDayByPersonText: string,
     manDayByPerson?: ManDayByPersonWithReports[],
+    groupedReports?: DailyReportGroup[],
   ) {
-    // 기본 내용으로 페이지 생성
-    const children: BlockObjectRequest[] = [
-      ...createCodeBlocks(text),
-      createParagraphBlock(manDayText),
-      createParagraphBlock(manDayByGroupText),
-    ];
-
-    // manDayByPerson이 없으면 기존 방식 사용
-    if (!manDayByPerson || manDayByPerson.length === 0) {
-      children.push(...createCodeBlocks(manDayByPersonText));
+    // 모든 블록 생성
+    const allBlocks: BlockObjectRequest[] = [];
+    
+    // 구조화된 데이터를 사용하여 블록 생성
+    if (groupedReports && groupedReports.length > 0) {
+      allBlocks.push(...createWeeklyReportBlocksFromData(groupedReports, date));
     }
+    
+    allBlocks.push(
+      createParagraphBlock(manDayText),
+      createParagraphBlock(manDayByGroupText)
+    );
+
+    // 블록을 청크로 나누기 (100개 제한 대응)
+    const blockChunks = chunkBlocks(allBlocks, 100);
+    
+    // 첫 번째 청크로 페이지 생성
+    const firstChunk = blockChunks[0] || [];
 
     // 페이지 생성
     const page = await notionClient.pages.create({
@@ -195,8 +202,13 @@ export class NotionService {
         emoji: '🔶',
       },
       properties: createPageProperties(title, date),
-      children,
+      children: firstChunk,
     });
+
+    // 나머지 청크들을 순차적으로 추가
+    for (let i = 1; i < blockChunks.length; i++) {
+      await this.appendBlocksToPage(page.id, blockChunks[i]);
+    }
 
     // manDayByPerson 블록을 별도로 추가
     if (manDayByPerson && manDayByPerson.length > 0) {
@@ -214,7 +226,6 @@ export class NotionService {
    * @param text - 보고서 내용 텍스트
    * @param manDayText - 공수 요약 텍스트
    * @param manDayByGroupText - 그룹별 공수 텍스트
-   * @param manDayByPersonText - 인원별 공수 텍스트 (더 이상 사용되지 않음)
    * @param manDayByPerson - 인원별 상세 공수 및 보고서 정보
    * @returns 생성된 Notion 페이지
    */
@@ -224,25 +235,23 @@ export class NotionService {
     text: string,
     manDayText: string,
     manDayByGroupText?: string,
-    manDayByPersonText?: string,
     manDayByPerson?: ManDayByPersonWithReports[],
   ) {
-    // 기본 내용으로 페이지 생성
-    const children: BlockObjectRequest[] = [
+    // 모든 블록 생성
+    const allBlocks: BlockObjectRequest[] = [
       ...createCodeBlocks(text),
       createParagraphBlock(manDayText),
     ];
 
     if (manDayByGroupText) {
-      children.push(createParagraphBlock(manDayByGroupText));
+      allBlocks.push(createParagraphBlock(manDayByGroupText));
     }
 
-    // manDayByPerson이 없으면 기존 방식 사용
-    if (!manDayByPerson || manDayByPerson.length === 0) {
-      if (manDayByPersonText) {
-        children.push(...createCodeBlocks(manDayByPersonText));
-      }
-    }
+    // 블록을 청크로 나누기 (100개 제한 대응)
+    const blockChunks = chunkBlocks(allBlocks, 100);
+    
+    // 첫 번째 청크로 페이지 생성
+    const firstChunk = blockChunks[0] || [];
 
     // 페이지 생성
     const page = await notionClient.pages.create({
@@ -253,8 +262,13 @@ export class NotionService {
         emoji: '📝',
       },
       properties: createPageProperties(title, date),
-      children,
+      children: firstChunk,
     });
+
+    // 나머지 청크들을 순차적으로 추가
+    for (let i = 1; i < blockChunks.length; i++) {
+      await this.appendBlocksToPage(page.id, blockChunks[i]);
+    }
 
     // manDayByPerson 블록을 별도로 추가
     if (manDayByPerson && manDayByPerson.length > 0) {
@@ -269,28 +283,39 @@ export class NotionService {
    * 월간 보고서 페이지를 생성한다
    * @param title - 보고서 제목
    * @param date - 보고서 날짜
-   * @param texts - 보고서 내용 배열
    * @param manDayText - 인원별 공수 텍스트
    * @param manDayByGroupText - 그룹별 공수 텍스트
    * @param manDayByPerson - 인원별 상세 공수 및 보고서 정보
+   * @param groupedReports - 구조화된 보고서 데이터
    * @returns 생성된 Notion 페이지
    */
   async createMonthlyReportPage(
     title: string,
     date: string,
-    texts: string[],
     manDayText: string,
     manDayByGroupText: string,
     manDayByPerson?: ManDayByPersonWithReports[],
+    groupedReports?: DailyReportGroup[],
   ) {
-    // 기본 내용으로 페이지 생성
-    const children: BlockObjectRequest[] = [
-      ...createMultipleCodeBlocks(texts),
+    // 모든 블록 생성
+    const allBlocks: BlockObjectRequest[] = [];
+    
+    // 구조화된 데이터를 사용하여 블록 생성
+    if (groupedReports && groupedReports.length > 0) {
+      allBlocks.push(...createMonthlyReportBlocksFromData(groupedReports, date));
+    }
+    
+    allBlocks.push(
       createParagraphBlock(manDayText),
-      createParagraphBlock(manDayByGroupText),
-    ];
+      createParagraphBlock(manDayByGroupText)
+    );
 
-    // 페이지 생성
+    // 블록을 청크로 나누기 (100개 제한 대응)
+    const blockChunks = chunkBlocks(allBlocks, 100);
+    
+    // 첫 번째 청크로 페이지 생성
+    const firstChunk = blockChunks[0] || [];
+    
     const page = await notionClient.pages.create({
       parent: {
         database_id: this.reportDatabaseId,
@@ -299,8 +324,13 @@ export class NotionService {
         emoji: '📊',
       },
       properties: createPageProperties(title, date),
-      children,
+      children: firstChunk,
     });
+
+    // 나머지 청크들을 순차적으로 추가
+    for (let i = 1; i < blockChunks.length; i++) {
+      await this.appendBlocksToPage(page.id, blockChunks[i]);
+    }
 
     // manDayByPerson 블록을 별도로 추가
     if (manDayByPerson && manDayByPerson.length > 0) {
@@ -336,5 +366,39 @@ export class NotionService {
       console.error('블록 추가 중 오류 발생:', error);
       throw error;
     }
+  }
+
+  /**
+   * 일일 보고서 제목을 생성한다
+   * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
+   * @returns 일일 보고서 제목
+   */
+  generateDailyReportTitle(date: string): string {
+    // 날짜 포맷 변환 (YYYY-MM-DD -> YY.MM.DD)
+    const formattedDate = date.slice(2).replace(/-/g, '.');
+    return `큐브 파트 일일업무 보고 (${formattedDate})`;
+  }
+
+  /**
+   * 주간 보고서 제목을 생성한다
+   * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
+   * @returns 주간 보고서 제목
+   */
+  generateWeeklyReportTitle(date: string): string {
+    const weekOfMonth = getWeekOfMonth(date);
+    return `${weekOfMonth} 큐브 파트 주간업무 보고`;
+  }
+
+  /**
+   * 월간 보고서 제목을 생성한다
+   * @param date - 보고서 날짜 (YYYY-MM-DD 형식)
+   * @returns 월간 보고서 제목
+   */
+  generateMonthlyReportTitle(date: string): string {
+    const monthYear = new Date(date).toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+    });
+    return `${monthYear} 큐브 파트 월간업무 보고`;
   }
 }
