@@ -8,6 +8,7 @@ import {
   formatReportItemText,
   formatReportGroupTitle,
 } from '../utils/reportUtils';
+import { formatDateToShortFormat } from '../utils/dateUtils';
 
 export class NotionStringifyService {
   /**
@@ -18,7 +19,7 @@ export class NotionStringifyService {
    */
   stringifyDailyReports(reports: DailyReportGroup[], date: string): ReportForm {
     // 날짜 포맷 변환 (YYYY-MM-DD -> YY.MM.DD)
-    const formattedDate = date.slice(2).replace(/-/g, '.');
+    const formattedDate = formatDateToShortFormat(date);
 
     // 헤더
     const title = `큐브 파트 일일업무 보고 (${formattedDate})`;

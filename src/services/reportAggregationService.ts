@@ -1,7 +1,8 @@
 import { DailyReport, ManDayByPersonWithReports } from '../types/report.d';
 import { MemberService } from './memberService';
+import { compareMemberPriorityByName } from '../utils/memberUtils';
 import { calculateManDayByGroup } from '../utils/reportUtils';
-import memberMap from '../config/members';
+import { SortContext, MemberPriorityByNameNumberSortStrategy, MemberPriorityByNameArraySortStrategy } from '../utils/sortStrategies';
 
 /**
  * 보고서 데이터 집계를 담당하는 서비스
@@ -38,19 +39,9 @@ export class ReportAggregationService {
     const manDayEntries = Object.entries(manDayMap);
 
     // 3. 멤버 우선순위에 따라 정렬
-    return manDayEntries.sort(([nameA], [nameB]) => {
-      const emailA = this.memberService.getEmailByName(nameA);
-      const emailB = this.memberService.getEmailByName(nameB);
-
-      const priorityA = this.memberService.getMemberPriority(emailA);
-      const priorityB = this.memberService.getMemberPriority(emailB);
-
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-
-      return nameA.localeCompare(nameB);
-    });
+    const sortStrategy = new MemberPriorityByNameNumberSortStrategy(this.memberService);
+    const sortContext = new SortContext(sortStrategy);
+    return sortContext.executeSort(manDayEntries);
   }
 
   /**
@@ -83,18 +74,9 @@ export class ReportAggregationService {
     const entries = Array.from(groupedByPerson.entries());
 
     // 멤버 우선순위로 정렬
-    const sortedEntries = entries.sort(([personA], [personB]) => {
-      const priorityA =
-        memberMap[this.memberService.getEmailByName(personA)]?.priority ?? 999;
-      const priorityB =
-        memberMap[this.memberService.getEmailByName(personB)]?.priority ?? 999;
-
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-
-      return personA.localeCompare(personB);
-    });
+    const sortStrategy = new MemberPriorityByNameArraySortStrategy(this.memberService);
+    const sortContext = new SortContext(sortStrategy);
+    const sortedEntries = sortContext.executeSort(entries);
 
     // 각 멤버의 보고서를 group, progressRate 기준으로 정렬
     return sortedEntries.map(([person, reports]) => [

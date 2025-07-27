@@ -6,7 +6,8 @@ import {
 } from '../types/report.d';
 import { getToday } from '../utils/dateUtils';
 import { MemberService } from './memberService';
-import memberMap from '../config/members';
+import { compareMemberPriorityByEmail } from '../utils/memberUtils';
+import { SortContext, ReportPrioritySortStrategy, GroupPrioritySortStrategy } from '../utils/sortStrategies';
 
 /**
  * 보고서 포맷팅을 담당하는 서비스
@@ -193,9 +194,12 @@ export class ReportFormatterService {
   private formatGroups(
     groupedByMain: Map<string, DailyReport[]>,
   ): FormattedDailyReport[] {
-    return Array.from(groupedByMain.entries())
-      .sort(this.sortGroups)
-      .map(([group, items]) => this.formatGroupItems(group, items));
+    const entries = Array.from(groupedByMain.entries());
+    const sortStrategy = new GroupPrioritySortStrategy();
+    const sortContext = new SortContext(sortStrategy);
+    const sortedEntries = sortContext.executeSort(entries);
+    
+    return sortedEntries.map(([group, items]) => this.formatGroupItems(group, items));
   }
 
   /**
@@ -245,15 +249,7 @@ export class ReportFormatterService {
     // 2. members priority 오름차순
     const emailA = this.memberService.getEmailByName(a.person);
     const emailB = this.memberService.getEmailByName(b.person);
-    const priorityA = memberMap[emailA]?.priority ?? 999;
-    const priorityB = memberMap[emailB]?.priority ?? 999;
-
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
-
-    // 3. 이름 순 (같은 우선순위일 경우)
-    return a.person.localeCompare(b.person);
+    return compareMemberPriorityByEmail(emailA, emailB);
   }
 
   /**
@@ -372,57 +368,90 @@ export class ReportFormatterService {
    * @returns 중복이 제거된 보고서 데이터 배열
    */
   distinctReports(reports: DailyReport[]): DailyReport[] {
-    // 중복 체크를 위한 맵 (키: person-pmsNumber 또는 person-title(빈문자열 제거))
     const uniqueMap = new Map<string, DailyReport>();
-
-    // manDay 합계를 저장할 맵
     const manDaySumMap = new Map<string, number>();
 
-    // 모든 보고서를 순회하며 중복 체크 및 manDay 합산
+    // 보고서 처리
     reports.forEach((report) => {
-      // 중복 체크 키 생성
-      let key: string;
-      if (report.pmsNumber && report.pmsNumber !== null) {
-        // pmsNumber가 있는 경우 pmsNumber로 중복 체크
-        key = `${report.person}-${report.pmsNumber}`;
-      } else {
-        // pmsNumber가 없는 경우 title(빈문자열 제거)로 중복 체크
-        const normalizedTitle = report.title.replace(/\s+/g, '');
-        key = `${report.person}-${normalizedTitle}`;
-      }
-
-      // manDay 합산 처리
-      const currentManDay = manDaySumMap.get(key) || 0;
-      manDaySumMap.set(key, currentManDay + (report.manDay || 0));
-
-      // 이미 맵에 존재하는 경우, 날짜 비교 후 가장 큰 값으로 업데이트
-      if (uniqueMap.has(key)) {
-        const existingReport = uniqueMap.get(key)!;
-        // end가 있으면 end, 없으면 start를 사용하여 비교
-        const existingDate = existingReport.date.end 
-          ? new Date(existingReport.date.end) 
-          : new Date(existingReport.date.start);
-        const currentDate = report.date.end 
-          ? new Date(report.date.end) 
-          : new Date(report.date.start);
-
-        // 현재 보고서의 날짜가 더 큰 경우에만 업데이트
-        if (currentDate > existingDate) {
-          uniqueMap.set(key, report);
-        }
-      } else {
-        // 맵에 없는 경우 추가
-        uniqueMap.set(key, report);
-      }
+      const key = this.generateDistinctKey(report);
+      this.updateManDaySum(manDaySumMap, key, report.manDay || 0);
+      this.updateUniqueReport(uniqueMap, key, report);
     });
 
-    // 최종 결과 생성 (manDay 합계 적용)
-    return Array.from(uniqueMap.entries()).map(([key, report]) => {
-      // 해당 키의 manDay 합계로 업데이트
-      return {
-        ...report,
-        manDay: manDaySumMap.get(key) || report.manDay || 0,
-      };
-    });
+    // 최종 결과 생성
+    return this.buildDistinctResults(uniqueMap, manDaySumMap);
+  }
+
+  /**
+   * 중복 체크를 위한 키 생성
+   * @param report - 보고서 데이터
+   * @returns 중복 체크 키
+   */
+  private generateDistinctKey(report: DailyReport): string {
+    if (report.pmsNumber && report.pmsNumber !== null) {
+      return `${report.person}-${report.pmsNumber}`;
+    } else {
+      const normalizedTitle = report.title.replace(/\s+/g, '');
+      return `${report.person}-${normalizedTitle}`;
+    }
+  }
+
+  /**
+   * manDay 합계 업데이트
+   * @param manDaySumMap - manDay 합계 맵
+   * @param key - 보고서 키
+   * @param manDay - 추가할 manDay
+   */
+  private updateManDaySum(manDaySumMap: Map<string, number>, key: string, manDay: number): void {
+    const currentManDay = manDaySumMap.get(key) || 0;
+    manDaySumMap.set(key, currentManDay + manDay);
+  }
+
+  /**
+   * 고유 보고서 맵 업데이트 (날짜 비교)
+   * @param uniqueMap - 고유 보고서 맵
+   * @param key - 보고서 키
+   * @param report - 현재 보고서
+   */
+  private updateUniqueReport(uniqueMap: Map<string, DailyReport>, key: string, report: DailyReport): void {
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, report);
+      return;
+    }
+
+    const existingReport = uniqueMap.get(key)!;
+    const existingDate = this.getComparisonDate(existingReport);
+    const currentDate = this.getComparisonDate(report);
+
+    if (currentDate > existingDate) {
+      uniqueMap.set(key, report);
+    }
+  }
+
+  /**
+   * 날짜 비교를 위한 Date 객체 반환
+   * @param report - 보고서 데이터
+   * @returns 비교용 Date 객체
+   */
+  private getComparisonDate(report: DailyReport): Date {
+    return report.date.end 
+      ? new Date(report.date.end) 
+      : new Date(report.date.start);
+  }
+
+  /**
+   * 최종 중복 제거 결과 생성
+   * @param uniqueMap - 고유 보고서 맵
+   * @param manDaySumMap - manDay 합계 맵
+   * @returns 중복 제거된 보고서 배열
+   */
+  private buildDistinctResults(
+    uniqueMap: Map<string, DailyReport>, 
+    manDaySumMap: Map<string, number>
+  ): DailyReport[] {
+    return Array.from(uniqueMap.entries()).map(([key, report]) => ({
+      ...report,
+      manDay: manDaySumMap.get(key) || report.manDay || 0,
+    }));
   }
 }

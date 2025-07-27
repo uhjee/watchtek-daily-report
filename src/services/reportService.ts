@@ -23,6 +23,7 @@ import { NotionStringifyService } from './notionStringifyService';
 import { MemberService } from './memberService';
 import { ReportAggregationService } from './reportAggregationService';
 import { ReportFormatterService } from './reportFormatterService';
+import { processManDayData } from '../utils/reportUtils';
 
 export class ReportService {
   private notionService: NotionService;
@@ -92,15 +93,15 @@ export class ReportService {
       this.aggregationService.getManDayByPerson(distinctReports);
 
     const title = this.notionService.generateMonthlyReportTitle(startDate);
-    const monthlyManDaySummary =
-      this.aggregationService.getManDaySummary(distinctReports);
-    const monthlyManDaySummaryByGroup =
-      this.aggregationService.getManDayByGroup(distinctReports);
-    const manDayText =
-      this.stringifyService.stringifyManDayMap(monthlyManDaySummary);
-    const manDayByGroupText = this.stringifyService.stringifyManDayMap(
-      monthlyManDaySummaryByGroup,
-      true,
+    const {
+      manDayText,
+      manDayByGroupText,
+      manDaySummary: monthlyManDaySummary,
+      manDayByGroup: monthlyManDaySummaryByGroup,
+    } = processManDayData(
+      distinctReports,
+      this.aggregationService,
+      this.stringifyService,
     );
 
     return {
@@ -137,15 +138,15 @@ export class ReportService {
       this.aggregationService.getManDayByPerson(distinctReports);
 
     const title = this.notionService.generateWeeklyReportTitle(startDate);
-    const weeklyManDaySummary =
-      this.aggregationService.getManDaySummary(distinctReports);
-    const weeklyManDaySummaryByGroup =
-      this.aggregationService.getManDayByGroup(distinctReports);
-    const manDayText =
-      this.stringifyService.stringifyManDayMap(weeklyManDaySummary);
-    const manDayByGroupText = this.stringifyService.stringifyManDayMap(
-      weeklyManDaySummaryByGroup,
-      true,
+    const {
+      manDayText,
+      manDayByGroupText,
+      manDaySummary: weeklyManDaySummary,
+      manDayByGroup: weeklyManDaySummaryByGroup,
+    } = processManDayData(
+      distinctReports,
+      this.aggregationService,
+      this.stringifyService,
     );
 
     return {
@@ -168,64 +169,89 @@ export class ReportService {
     startDate: string,
     endDate?: string,
   ): Promise<ReportDailyData> {
-    // 1. 원본 데이터 조회 (일일 보고서용)
+    // 일일 데이터 처리
+    const dailyData = await this.processDailyData(startDate);
+
+    // 주간 데이터 처리 (manDayByPerson 계산용)
+    const weeklyData = await this.processWeeklyDataForDaily();
+
+    // 결과 조합
+    return this.buildDailyReportResult(startDate, dailyData, weeklyData);
+  }
+
+  /**
+   * 일일 보고서를 위한 일일 데이터 처리
+   * @param startDate - 시작 날짜
+   * @returns 처리된 일일 데이터
+   */
+  private async processDailyData(startDate: string) {
+    // 1. 원본 데이터 조회 및 포맷팅
     const reports = await this.getDailyReportsData(startDate);
-
-    // 2. 기본 데이터 포맷 변환
     const formattedReports = this.formatReportData(reports);
-
-    // 중복 제거 처리
     const distinctReports =
       this.formatterService.distinctReports(formattedReports);
 
-    // 3. member별 manDay 집계
-    const manDaySummary = this.aggregationService.getManDaySummary(
+    // 2. 데이터 처리
+    const { manDayText } = processManDayData(
       distinctReports,
-      true,
+      this.aggregationService,
+      this.stringifyService,
+      false,
     );
-    const manDayText = this.stringifyService.stringifyManDayMap(manDaySummary);
-
-    // 4. 보고서 포맷으로 변환
     const groupedReports =
       this.formatterService.formatDailyReports(distinctReports);
-
-    // 5. 제목 생성
     const title = this.notionService.generateDailyReportTitle(startDate);
 
-    // 일주일 기준
-    // 6. 이번 주 데이터 조회 (manDayByPerson 계산용)
+    return { distinctReports, manDayText, groupedReports, title };
+  }
+
+  /**
+   * 일일 보고서를 위한 주간 데이터 처리
+   * @returns 처리된 주간 데이터
+   */
+  private async processWeeklyDataForDaily() {
+    // 1. 주간 데이터 조회 및 포맷팅
     const weeklyReports = await this.getWeeklyReportsData();
     const formattedWeeklyReports = this.formatReportData(weeklyReports);
-
-    // 중복 제거 처리
     const distinctWeeklyReports = this.formatterService.distinctReports(
       formattedWeeklyReports,
     );
 
-    // 7. 이번 주 데이터 기준으로 manDayByPerson 계산
+    // 2. 주간 데이터 집계
     const manDayByPerson = this.aggregationService.getManDayByPerson(
       distinctWeeklyReports,
     );
-
-    // 8. 이번 주 데이터 기준으로 manDayByGroup 계산
-    const weeklyManDaySummaryByGroup = this.aggregationService.getManDayByGroup(
+    const { manDayByGroupText } = processManDayData(
       distinctWeeklyReports,
-    );
-    const manDayByGroupText = this.stringifyService.stringifyManDayMap(
-      weeklyManDaySummaryByGroup,
-      true,
+      this.aggregationService,
+      this.stringifyService,
     );
 
+    return { manDayByPerson, manDayByGroupText };
+  }
+
+  /**
+   * 일일 보고서 결과 구성
+   * @param startDate - 시작 날짜
+   * @param dailyData - 처리된 일일 데이터
+   * @param weeklyData - 처리된 주간 데이터
+   * @returns 완성된 일일 보고서 데이터
+   */
+  private buildDailyReportResult(
+    startDate: string,
+    dailyData: { groupedReports: any; title: string; manDayText: string },
+    weeklyData: { manDayByPerson: any; manDayByGroupText: string },
+  ): ReportDailyData {
     return {
       reportType: 'daily',
-      title,
+      title: dailyData.title,
       text: this.stringifyService.stringifyDailyReports(
-        groupedReports,
+        dailyData.groupedReports,
         startDate,
       ).text,
-      manDayText,
-      manDayByGroupText,
-      manDayByPerson,
+      manDayText: dailyData.manDayText,
+      manDayByGroupText: weeklyData.manDayByGroupText,
+      manDayByPerson: weeklyData.manDayByPerson,
     };
   }
 
@@ -278,7 +304,6 @@ export class ReportService {
       // 전체 결과 조회
       const results = await this.notionService.queryDatabaseAll(filter, sorts);
 
-      // console.dir({ results }, { depth: 20 });
       return results;
     } catch (error) {
       console.error('일일 보고서 조회 중 오류 발생:', error);

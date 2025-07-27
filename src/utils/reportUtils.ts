@@ -1,4 +1,6 @@
 import { DailyReport, DailyReportGroup, DailyReportItem } from '../types/report.d';
+import { ReportAggregationService } from '../services/reportAggregationService';
+import { NotionStringifyService } from '../services/notionStringifyService';
 
 /**
  * 보고서 관련 유틸리티 함수들
@@ -67,4 +69,38 @@ export function formatReportGroupTitle(reportType: string, isWeekly: boolean = f
   };
   
   return titleMap[reportType] || `${reportType}`;
+}
+
+/**
+ * 공수 데이터를 처리하여 텍스트로 변환하는 공통 함수
+ * ReportService의 중복 패턴을 제거하기 위한 유틸리티
+ * @param reports - 일일 보고서 데이터 배열
+ * @param aggregationService - 공수 집계 서비스
+ * @param stringifyService - 문자열 변환 서비스
+ * @param includeGroupData - 그룹별 공수 데이터 포함 여부 (기본값: true)
+ * @returns 공수 데이터 처리 결과
+ */
+export function processManDayData(
+  reports: DailyReport[], 
+  aggregationService: ReportAggregationService,
+  stringifyService: NotionStringifyService,
+  includeGroupData: boolean = true
+) {
+  const manDaySummary = aggregationService.getManDaySummary(reports);
+  const manDayText = stringifyService.stringifyManDayMap(manDaySummary);
+  
+  let manDayByGroup;
+  let manDayByGroupText;
+  
+  if (includeGroupData) {
+    manDayByGroup = aggregationService.getManDayByGroup(reports);
+    manDayByGroupText = stringifyService.stringifyManDayMap(manDayByGroup, true);
+  }
+  
+  return { 
+    manDayText, 
+    manDayByGroupText, 
+    manDaySummary, 
+    manDayByGroup 
+  };
 }

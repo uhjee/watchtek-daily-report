@@ -133,3 +133,13 @@ export function isLastFridayOfMonth(date: Date, forceFlag?: boolean): boolean {
 
   return result;
 }
+
+/**
+ * 날짜를 YY.MM.DD 형식으로 변환 (YYYY-MM-DD → YY.MM.DD)
+ * 중복 제거를 위한 공통 함수
+ * @param date - YYYY-MM-DD 형식의 날짜 문자열
+ * @returns YY.MM.DD 형식의 날짜 문자열
+ */
+export function formatDateToShortFormat(date: string): string {
+  return date.slice(2).replace(/-/g, '.');
+}
