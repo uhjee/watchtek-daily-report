@@ -79,17 +79,25 @@ export class NotionApiService {
    * 보고서 데이터베이스에 새로운 페이지를 생성한다
    * @param properties - 페이지 속성
    * @param children - 페이지 블록 내용
+   * @param icon - 페이지 아이콘 (선택사항)
    * @returns 생성된 Notion 페이지
    */
-  async createPage(properties: any, children: any[]) {
+  async createPage(properties: any, children: any[], icon?: any) {
     try {
-      return await notionClient.pages.create({
+      const pageData: any = {
         parent: {
           database_id: this.reportDatabaseId,
         },
         properties,
         children,
-      });
+      };
+
+      // 아이콘이 제공된 경우 추가
+      if (icon) {
+        pageData.icon = icon;
+      }
+
+      return await notionClient.pages.create(pageData);
     } catch (error) {
       console.error('Notion 페이지 생성 중 오류 발생:', error);
       throw error;

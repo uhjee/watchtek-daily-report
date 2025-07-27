@@ -4,6 +4,9 @@ import {
   getToday,
   getCurrentMonthRange,
   isLastFridayOfMonth,
+  isHoliday,
+  isLastWeekdayOfWeek,
+  isLastWeekdayOfMonth,
 } from '../utils/dateUtils';
 import {
   DailyReport,
@@ -42,28 +45,35 @@ export class ReportService {
 
   /**
    * 특정 날짜 범위의 일일 보고서를 조회하고 포맷된 데이터를 반환한다
+   * 휴일이 아닌 경우에만 보고서를 생성하며, 각 보고서 타입별로 세분화된 조건을 적용한다
    * @param startDate - 시작 날짜 (YYYY-MM-DD 형식)
    * @param endDate - 종료 날짜 (YYYY-MM-DD 형식). 미입력시 startDate + 1일
-   * @returns 포맷된 일일 보고서 데이터
+   * @returns 포맷된 일일 보고서 데이터 (휴일인 경우 null 반환)
    */
   async getReportData(
     startDate: string,
     endDate?: string,
-  ): Promise<ReportData> {
-    const date = new Date(getToday());
+  ): Promise<ReportData | null> {
+    // 1. 휴일 체크 - 휴일인 경우 보고서 생성하지 않음
+    if (isHoliday(startDate)) {
+      return null;
+    }
+
     const result: ReportData = {};
 
-    // 일일 보고서 조회
+    // 2. 평일인 경우 보고서 생성
+    // Daily: 휴일이 아니므로 무조건 생성
     const dailyReport = await this.getDailyReports(startDate, endDate);
     result.dailyData = dailyReport;
 
-    // 금요일이면 이번주 보고서 조회
-    if (date.getDay() === 5) {
+    // Weekly: 해당 주의 마지막 평일인 경우 생성
+    if (isLastWeekdayOfWeek(startDate)) {
       const weeklyReport = await this.getWeeklyReports(startDate, endDate);
       result.weeklyData = weeklyReport;
     }
-    // 이번 달의 마지막 주 금요일인지 확인
-    if (isLastFridayOfMonth(date, true)) {
+
+    // Monthly: 해당 월의 마지막 주의 마지막 평일인 경우 생성
+    if (isLastWeekdayOfMonth(startDate)) {
       const monthlyReport = await this.getMonthlyReports(startDate, endDate);
       result.monthlyData = monthlyReport;
     }

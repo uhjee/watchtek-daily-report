@@ -13,6 +13,7 @@ import {
   createCodeBlocks,
   createParagraphBlock,
   createPageProperties,
+  createPageIcon,
   createHeading2Block,
   createManDayByPersonBlocks,
   createWeeklyReportBlocksFromData,
@@ -41,14 +42,15 @@ export abstract class AbstractReportPageCreator implements ReportPageCreator {
     const contentBlocks = this.createContentBlocks(reportData, date);
     const allBlocks = [...blocks, ...contentBlocks];
 
-    const properties = createPageProperties(reportData.title, date);
+    const properties = createPageProperties(reportData.title, date, reportData.reportType);
+    const icon = createPageIcon(reportData.reportType);
     
     // 100개 블록 제한을 고려하여 첫 번째 청크로만 페이지 생성
     const BLOCK_LIMIT = 100;
     const initialBlocks = allBlocks.slice(0, BLOCK_LIMIT);
     const remainingBlocks = allBlocks.slice(BLOCK_LIMIT);
 
-    const response = await this.notionApiService.createPage(properties, initialBlocks);
+    const response = await this.notionApiService.createPage(properties, initialBlocks, icon);
 
     // 나머지 블록들을 순차적으로 추가
     if (remainingBlocks.length > 0) {

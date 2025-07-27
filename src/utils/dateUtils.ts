@@ -2,6 +2,8 @@
  * 날짜 관련 유틸리티 함수 모음
  */
 
+import * as holiday from 'holiday-kr';
+
 // 날짜 포맷터 상수
 const KST_DATE_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
   timeZone: 'Asia/Seoul',
@@ -29,9 +31,9 @@ export function formatDateToYYYYMMDD(date: Date): string {
  */
 export function getToday(): string {
   const now = new Date();
-  return formatDateToYYYYMMDD(now);
+  // return formatDateToYYYYMMDD(now);
   // 테스트용 고정 날짜는 주석 처리
-  // return '2025-07-22';
+  return '2025-07-25';
 }
 
 /**
@@ -142,4 +144,115 @@ export function isLastFridayOfMonth(date: Date, forceFlag?: boolean): boolean {
  */
 export function formatDateToShortFormat(date: string): string {
   return date.slice(2).replace(/-/g, '.');
+}
+
+/**
+ * 특정 날짜가 휴일(주말 또는 공휴일)인지 확인
+ * @param dateString - YYYY-MM-DD 형식의 날짜 문자열
+ * @returns 휴일 여부
+ */
+export function isHoliday(dateString: string): boolean {
+  const date = new Date(dateString);
+  
+  // 주말 체크
+  const isWeekend = isWeekendDay(date);
+  
+  // 공휴일 체크 (양력 기준)
+  const isPublicHoliday = holiday.isHoliday(
+    date.getFullYear(),
+    date.getMonth() + 1,
+    date.getDate(),
+    false, // isLunar
+    false, // isLeapMonth
+  );
+  
+  return isWeekend || isPublicHoliday;
+}
+
+/**
+ * 주말 여부 확인
+ * @param date - 확인할 날짜
+ * @returns 주말 여부
+ */
+function isWeekendDay(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 6; // 0: 일요일, 6: 토요일
+}
+
+/**
+ * 평일(월~금) 중에서 주어진 날짜를 포함한 주의 마지막 평일을 반환
+ * 휴일이 아닌 평일 기준으로 계산
+ * @param dateString - YYYY-MM-DD 형식의 날짜 문자열
+ * @returns 해당 주의 마지막 평일 (YYYY-MM-DD 형식)
+ */
+export function getLastWeekdayOfWeek(dateString: string): string {
+  const date = new Date(dateString);
+  const dayOfWeek = date.getDay(); // 0: 일, 1: 월, ..., 6: 토
+  
+  // 해당 주의 금요일 계산
+  const friday = new Date(date);
+  const daysToFriday = 5 - dayOfWeek; // 금요일까지 남은 일수
+  friday.setDate(date.getDate() + daysToFriday);
+  
+  // 금요일부터 거슬러 올라가면서 첫 번째 평일(비휴일) 찾기
+  let lastWeekday = new Date(friday);
+  
+  while (lastWeekday.getDay() >= 1 && lastWeekday.getDay() <= 5) { // 월~금 범위에서
+    const dateStr = formatDateToYYYYMMDD(lastWeekday);
+    if (!isHoliday(dateStr)) {
+      return dateStr;
+    }
+    // 하루 전으로 이동
+    lastWeekday.setDate(lastWeekday.getDate() - 1);
+  }
+  
+  // 만약 해당 주에 평일이 없다면 금요일 반환 (예외 상황)
+  return formatDateToYYYYMMDD(friday);
+}
+
+/**
+ * 주어진 날짜가 해당 주의 마지막 평일인지 확인
+ * @param dateString - YYYY-MM-DD 형식의 날짜 문자열
+ * @returns 해당 주의 마지막 평일 여부
+ */
+export function isLastWeekdayOfWeek(dateString: string): boolean {
+  const lastWeekday = getLastWeekdayOfWeek(dateString);
+  return dateString === lastWeekday;
+}
+
+/**
+ * 주어진 날짜가 해당 월의 마지막 주인지 확인 (수요일 기준)
+ * @param dateString - YYYY-MM-DD 형식의 날짜 문자열
+ * @returns 마지막 주 여부
+ */
+export function isLastWeekOfMonth(dateString: string): boolean {
+  const date = new Date(dateString);
+  const dayOfWeek = date.getDay();
+  
+  // 해당 주의 수요일 계산
+  const wednesday = new Date(date);
+  const daysToWednesday = dayOfWeek >= 3 ? dayOfWeek - 3 : dayOfWeek + 4;
+  wednesday.setDate(date.getDate() - daysToWednesday);
+  
+  // 다음 주 수요일 계산
+  const nextWednesday = new Date(wednesday);
+  nextWednesday.setDate(wednesday.getDate() + 7);
+  
+  // 이번 주 수요일과 다음 주 수요일의 월 비교
+  return wednesday.getMonth() !== nextWednesday.getMonth();
+}
+
+/**
+ * 주어진 날짜가 해당 월의 마지막 주의 마지막 평일인지 확인
+ * @param dateString - YYYY-MM-DD 형식의 날짜 문자열
+ * @returns 마지막 주의 마지막 평일 여부
+ */
+export function isLastWeekdayOfMonth(dateString: string): boolean {
+  // 1. 해당 주의 마지막 평일인지 확인
+  if (!isLastWeekdayOfWeek(dateString)) {
+    return false;
+  }
+  
+  // 2. 해당 월의 마지막 주인지 확인
+  return isLastWeekOfMonth(dateString);
 }

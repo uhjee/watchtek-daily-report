@@ -293,10 +293,11 @@ export function chunkBlocks(
  * 보고서 페이지의 기본 속성을 생성한다
  * @param title - 페이지 제목
  * @param date - 보고서 날짜
+ * @param reportType - 보고서 타입 ('daily' | 'weekly' | 'monthly')
  * @returns 페이지 속성 객체
  */
-export function createPageProperties(title: string, date: string) {
-  return {
+export function createPageProperties(title: string, date: string, reportType?: string) {
+  const properties: any = {
     title: {
       title: [
         {
@@ -312,6 +313,49 @@ export function createPageProperties(title: string, date: string) {
       },
     },
   };
+
+  // Tags select property 추가
+  if (reportType) {
+    const tagMap = {
+      'daily': '일간',
+      'weekly': '주간',
+      'monthly': '월간'
+    };
+    
+    const tagName = tagMap[reportType as keyof typeof tagMap];
+    if (tagName) {
+      properties.Tags = {
+        select: {
+          name: tagName
+        }
+      };
+    }
+  }
+
+  return properties;
+}
+
+/**
+ * 보고서 타입에 따른 페이지 아이콘을 생성한다
+ * @param reportType - 보고서 타입 ('daily' | 'weekly' | 'monthly')
+ * @returns 아이콘 객체 또는 undefined
+ */
+export function createPageIcon(reportType: string) {
+  const iconMap = {
+    'daily': '📝',
+    'weekly': '🔶', 
+    'monthly': '📊'
+  };
+  
+  const emoji = iconMap[reportType as keyof typeof iconMap];
+  if (emoji) {
+    return {
+      type: 'emoji' as const,
+      emoji: emoji
+    };
+  }
+  
+  return undefined;
 }
 
 /**

@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { config } from '../config/config';
 import * as holiday from 'holiday-kr';
+import { getToday } from '../utils/dateUtils';
 
 export class SchedulerService {
   private scheduledTask: cron.ScheduledTask | null = null;
@@ -49,8 +50,9 @@ export class SchedulerService {
    */
   private async executeScheduledJob(jobFunction: () => Promise<void>): Promise<void> {
     // 현재 날짜가 휴일인지 체크
-    const now = new Date();
-    if (!this.executeOnHoliday && this.isHoliday(now)) {
+    const todayString = getToday();
+    const today = new Date(todayString);
+    if (!this.executeOnHoliday && this.isHoliday(today)) {
       console.log('오늘은 휴일이므로 작업을 실행하지 않습니다.');
       return;
     }
