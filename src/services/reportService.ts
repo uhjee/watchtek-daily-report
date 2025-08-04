@@ -92,7 +92,11 @@ export class ReportService {
     endDate?: string,
   ): Promise<ReportMonthlyData> {
     const reports = await this.getMonthlyReportsData();
-    const formattedReports = this.formatReportData(reports);
+    
+    // 다중 담당자 처리
+    const processedReports = this.processMultiplePeople(reports);
+    
+    const formattedReports = this.formatReportData(processedReports);
     // 중복 제거 처리
     const distinctReports =
       this.formatterService.distinctReports(formattedReports);
@@ -136,7 +140,11 @@ export class ReportService {
     endDate?: string,
   ): Promise<ReportWeeklyData> {
     const reports = await this.getWeeklyReportsData();
-    const formattedReports = this.formatReportData(reports);
+    
+    // 다중 담당자 처리
+    const processedReports = this.processMultiplePeople(reports);
+    
+    const formattedReports = this.formatReportData(processedReports);
 
     // 중복 제거 처리
     const distinctReports =
@@ -197,11 +205,15 @@ export class ReportService {
   private async processDailyData(startDate: string) {
     // 1. 원본 데이터 조회 및 포맷팅
     const reports = await this.getDailyReportsData(startDate);
-    const formattedReports = this.formatReportData(reports);
+    
+    // 2. 다중 담당자 처리
+    const processedReports = this.processMultiplePeople(reports);
+    
+    const formattedReports = this.formatReportData(processedReports);
     const distinctReports =
       this.formatterService.distinctReports(formattedReports);
 
-    // 2. 데이터 처리
+    // 3. 데이터 처리
     const { manDayText } = processManDayData(
       distinctReports,
       this.aggregationService,
@@ -222,12 +234,16 @@ export class ReportService {
   private async processWeeklyDataForDaily() {
     // 1. 주간 데이터 조회 및 포맷팅
     const weeklyReports = await this.getWeeklyReportsData();
-    const formattedWeeklyReports = this.formatReportData(weeklyReports);
+    
+    // 2. 다중 담당자 처리
+    const processedWeeklyReports = this.processMultiplePeople(weeklyReports);
+    
+    const formattedWeeklyReports = this.formatReportData(processedWeeklyReports);
     const distinctWeeklyReports = this.formatterService.distinctReports(
       formattedWeeklyReports,
     );
 
-    // 2. 주간 데이터 집계
+    // 3. 주간 데이터 집계
     const manDayByPerson = this.aggregationService.getManDayByPerson(
       distinctWeeklyReports,
     );
@@ -238,6 +254,33 @@ export class ReportService {
     );
 
     return { manDayByPerson, manDayByGroupText };
+  }
+
+  /**
+   * 다중 담당자가 할당된 보고서를 담당자별로 복제하여 처리한다
+   * @param reports - 원본 Notion 페이지 배열
+   * @returns 담당자별로 분할된 보고서 배열
+   */
+  private processMultiplePeople(reports: unknown[]): unknown[] {
+    const processedReports: any[] = [];
+    
+    (reports as any[]).forEach((report) => {
+      const people = report.properties?.Person?.people || [];
+      
+      if (people.length <= 1) {
+        // 담당자가 1명 이하인 경우 그대로 추가
+        processedReports.push(report);
+      } else {
+        // 담당자가 2명 이상인 경우 각 담당자별로 복제
+        people.forEach((person: any) => {
+          const clonedReport = JSON.parse(JSON.stringify(report)); // 깊은 복사
+          clonedReport.properties.Person.people = [person]; // 담당자 1명만 할당
+          processedReports.push(clonedReport);
+        });
+      }
+    });
+    
+    return processedReports;
   }
 
   /**

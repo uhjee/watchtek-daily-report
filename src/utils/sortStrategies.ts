@@ -77,7 +77,7 @@ export class GroupPrioritySortStrategy implements SortStrategy<[string, DailyRep
       if (groupA === 'DCIM프로젝트') return -1;
       if (groupB === 'DCIM프로젝트') return 1;
 
-      const specialGroups = ['사이트 지원', '결함처리', 'OJT', '기타'];
+      const specialGroups = ['사이트 지원', '결함처리', 'OJT', '회의', '기타'];
       
       const isSpecialA = specialGroups.includes(groupA);
       const isSpecialB = specialGroups.includes(groupB);

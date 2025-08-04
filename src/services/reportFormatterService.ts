@@ -94,9 +94,12 @@ export class ReportFormatterService {
   private filterReportsByDay(reports: DailyReport[]) {
     const today = getToday();
 
+    // 0. 다중 담당자 일감 통합 처리
+    const consolidatedReports = this.consolidateMultiPersonTasks(reports);
+
     // 1. isToday/isTomorrow로 먼저 그룹핑
-    const todayReports = reports.filter((report) => report.isToday);
-    const tomorrowReports = reports.filter((report) => report.isTomorrow);
+    const todayReports = consolidatedReports.filter((report) => report.isToday);
+    const tomorrowReports = consolidatedReports.filter((report) => report.isTomorrow);
 
     // 2. 데이터가 부족한 항목들을 별도로 분류
     const incompleteTodayReports = this.filterIncompleteReports(todayReports);
@@ -123,6 +126,95 @@ export class ReportFormatterService {
       incompleteTodayReports,
       allTomorrowReports,
       incompleteTomorrowReports,
+    };
+  }
+
+  /**
+   * 다중 담당자 일감을 그룹화하여 하나의 요소로 통합합니다
+   * 조건: group이 ['회의', '기타']이고, 담당자가 다르며, 동일한 PMS number 또는 title을 가진 경우
+   * @param reports - 보고서 데이터 배열
+   * @returns 통합된 보고서 데이터 배열
+   */
+  private consolidateMultiPersonTasks(reports: DailyReport[]): DailyReport[] {
+    const targetGroups = ['회의', '기타'];
+    const consolidatedReports: DailyReport[] = [];
+    const processedKeys = new Set<string>();
+
+    // 대상 그룹과 나머지 그룹 분리
+    const targetReports = reports.filter(report => targetGroups.includes(report.group));
+    const otherReports = reports.filter(report => !targetGroups.includes(report.group));
+
+    // 대상 그룹을 PMS number 또는 title로 그룹화
+    const groupedByTask = new Map<string, DailyReport[]>();
+
+    targetReports.forEach(report => {
+      const key = this.getTaskGroupingKey(report);
+      if (!groupedByTask.has(key)) {
+        groupedByTask.set(key, []);
+      }
+      groupedByTask.get(key)!.push(report);
+    });
+
+    // 각 그룹별로 통합 처리
+    groupedByTask.forEach((taskReports, key) => {
+      if (processedKeys.has(key)) return;
+
+      // 담당자가 다른지 확인 (2명 이상이고 담당자가 다른 경우)
+      const uniquePersons = [...new Set(taskReports.map(r => r.person))];
+      
+      if (taskReports.length > 1 && uniquePersons.length > 1) {
+        // 다중 담당자 일감으로 통합
+        const consolidatedTask = this.createConsolidatedTask(taskReports, uniquePersons);
+        consolidatedReports.push(consolidatedTask);
+        processedKeys.add(key);
+      } else {
+        // 조건에 맞지 않는 경우 원본 그대로 추가
+        consolidatedReports.push(...taskReports);
+        processedKeys.add(key);
+      }
+    });
+
+    // 나머지 그룹은 그대로 추가
+    consolidatedReports.push(...otherReports);
+
+    return consolidatedReports;
+  }
+
+  /**
+   * 작업 그룹화를 위한 키를 생성합니다
+   * @param report - 보고서 데이터
+   * @returns 그룹화 키
+   */
+  private getTaskGroupingKey(report: DailyReport): string {
+    if (report.pmsNumber && report.pmsNumber !== null) {
+      return `${report.group}-pms-${report.pmsNumber}`;
+    } else {
+      const normalizedTitle = report.title.replace(/\s+/g, '');
+      return `${report.group}-title-${normalizedTitle}`;
+    }
+  }
+
+  /**
+   * 통합된 작업을 생성합니다
+   * @param taskReports - 통합할 작업 리스트
+   * @param uniquePersons - 고유 담당자 리스트
+   * @returns 통합된 작업
+   */
+  private createConsolidatedTask(taskReports: DailyReport[], uniquePersons: string[]): DailyReport {
+    // 첫 번째 보고서를 기준으로 복사
+    const baseReport = taskReports[0];
+    
+    // 담당자 이름을 나열 (진척률 제거)
+    const consolidatedPerson = uniquePersons.join(', ');
+    
+    // 공수는 합산
+    const totalManDay = taskReports.reduce((sum, report) => sum + (report.manDay || 0), 0);
+
+    return {
+      ...baseReport,
+      person: consolidatedPerson,
+      progressRate: 0, // 진척률 제거
+      manDay: totalManDay,
     };
   }
 
@@ -205,7 +297,7 @@ export class ReportFormatterService {
   /**
    * 그룹 정렬 로직을 처리합니다
    * DCIM프로젝트 > 일반 그룹 > 특수 그룹 순으로 정렬
-   * - 특수 그룹: 사이트 지원, 결함처리, OJT, 기타
+   * - 특수 그룹: 사이트 지원, 결함처리, OJT, 회의, 기타
    */
   private sortGroups(
     [a]: [string, DailyReport[]],
@@ -215,7 +307,7 @@ export class ReportFormatterService {
     if (a === 'DCIM프로젝트') return -1;
     if (b === 'DCIM프로젝트') return 1;
 
-    const specialGroups = ['사이트 지원', '결함처리', 'OJT', '기타'];
+    const specialGroups = ['사이트 지원', '결함처리', 'OJT', '회의', '기타'];
     const aIndex = specialGroups.indexOf(a);
     const bIndex = specialGroups.indexOf(b);
 

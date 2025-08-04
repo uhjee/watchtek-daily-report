@@ -31,9 +31,9 @@ export function formatDateToYYYYMMDD(date: Date): string {
  */
 export function getToday(): string {
   const now = new Date();
-  // return formatDateToYYYYMMDD(now);
+  return formatDateToYYYYMMDD(now);
   // 테스트용 고정 날짜는 주석 처리
-  return '2025-07-25';
+  // return '2025-07-25';
 }
 
 /**
