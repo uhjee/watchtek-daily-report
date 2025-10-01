@@ -73,8 +73,7 @@ export class ReportService {
     }
 
     // Monthly: 해당 월의 마지막 주의 마지막 평일인 경우 생성
-    // if (isLastWeekdayOfMonth(startDate)) {
-    if (true) {
+    if (isLastWeekdayOfMonth(startDate)) {
       const monthlyReport = await this.getMonthlyReports(startDate, endDate);
       result.monthlyData = monthlyReport;
     }

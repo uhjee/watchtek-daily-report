@@ -20,7 +20,7 @@ async function generateAndSaveReports(): Promise<void> {
     console.log(`${today} 날짜의 보고서를 생성합니다.`);
 
     // 특정 날짜의 포맷된 보고서 데이터 조회
-    const reportData = await reportService.getReportData("2025-09-30");
+    const reportData = await reportService.getReportData(today);
 
     // 휴일 체크 (reportData가 null인 경우)
     if (!reportData) {
