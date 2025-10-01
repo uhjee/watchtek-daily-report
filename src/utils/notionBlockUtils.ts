@@ -361,12 +361,12 @@ export function createPageIcon(reportType: string) {
 /**
  * 인원별 상세 공수 정보 블록들을 생성한다 (테이블 형태)
  * @param manDayByPerson - 인원별 공수 및 보고서 정보 배열
- * @param sectionTitle - 섹션 제목 (기본값: '[일주일 인원별 공수]')
+ * @param sectionTitle - 섹션 제목 (기본값: '[인원별 공수]')
  * @returns 인원별 상세 공수 블록 배열
  */
 export function createManDayByPersonBlocks(
   manDayByPerson: ManDayByPersonWithReports[],
-  sectionTitle: string = '[일주일 인원별 공수]',
+  sectionTitle: string = '[인원별 공수]',
 ): BlockObjectRequest[] {
   const blocks: BlockObjectRequest[] = [];
 
@@ -385,8 +385,18 @@ export function createManDayByPersonBlocks(
         (report) => report.manDay > 0,
       );
 
+      // '회의' 그룹을 가장 아래로 정렬
+      const sortedReports = filteredReports.sort((a, b) => {
+        const aIsMeeting = a.group === '회의';
+        const bIsMeeting = b.group === '회의';
+        
+        if (aIsMeeting && !bIsMeeting) return 1;  // a가 회의면 뒤로
+        if (!aIsMeeting && bIsMeeting) return -1; // b가 회의면 뒤로
+        return 0; // 둘 다 회의이거나 둘 다 아니면 순서 유지
+      });
+
       // 보고서가 있는 경우에만 테이블 생성
-      if (filteredReports.length > 0) {
+      if (sortedReports.length > 0) {
         // 테이블 헤더
         const tableHeader: TableCellData[] = [
           '번호',
@@ -398,7 +408,7 @@ export function createManDayByPersonBlocks(
         ];
 
         // 테이블 데이터 생성 (PmsLink 활용)
-        const tableDataRows: TableCellData[][] = filteredReports.map((report, index) => [
+        const tableDataRows: TableCellData[][] = sortedReports.map((report, index) => [
           `${index + 1}`,
           // PmsLink가 있으면 하이퍼링크로, 없으면 일반 텍스트로
           report.pmsLink && report.pmsNumber

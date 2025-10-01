@@ -62,16 +62,26 @@ export function getWeekOfMonth(dateString: string): string {
 }
 
 /**
- * 현재 달의 첫날과 마지막 날을 YYYY-MM-DD 형식으로 반환
- * 가장 최근 지난 수요일을 기준으로 계산
- * @returns 이번 달의 첫날과 마지막 날
+ * 특정 날짜가 속한 달의 첫날과 마지막 날을 YYYY-MM-DD 형식으로 반환
+ * @param startDate - YYYY-MM-DD 형식의 기준 날짜
+ * @returns 해당 달의 첫날과 마지막 날
  */
-export function getCurrentMonthRange(): { firstDay: string; lastDay: string } {
-  const now = new Date();
+export function getCurrentMonthRange(startDate: string): { firstDay: string; lastDay: string } {
+  const date = new Date(startDate);
+  return getMonthRange(date);
+}
+
+/**
+ * 가장 최근 지난 수요일을 기준으로 현재 월의 첫날과 마지막 날을 YYYY-MM-DD 형식으로 반환
+ * 월~화: 이전 주 수요일 기준, 수~일: 이번 주 수요일 기준으로 월 판단
+ * @returns 수요일 기준 현재 달의 첫날과 마지막 날
+ */
+export function getCurrentMonthRangeByWednesday(startDate: string): { firstDay: string; lastDay: string } {
+  const now = new Date(startDate);
   const dayOfWeek = now.getDay(); // 0: 일요일, 1: 월요일, ..., 6: 토요일
 
   // 가장 최근 지난 수요일까지의 일수 계산
-  // 수요일은 3, 오늘이 수요일이면 0, 수요일 이후면 (7 - (dayOfWeek - 3))
+  // 수요일은 3, 오늘이 수요일이면 0, 수요일 이후면 (dayOfWeek - 3)
   const daysSinceLastWednesday = dayOfWeek >= 3 ? dayOfWeek - 3 : dayOfWeek + 4; // 일(0), 월(1), 화(2)는 이전 주 수요일까지의 일수
 
   const lastWednesday = new Date(now);

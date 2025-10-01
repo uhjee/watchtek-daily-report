@@ -73,7 +73,8 @@ export class ReportService {
     }
 
     // Monthly: 해당 월의 마지막 주의 마지막 평일인 경우 생성
-    if (isLastWeekdayOfMonth(startDate)) {
+    // if (isLastWeekdayOfMonth(startDate)) {
+    if (true) {
       const monthlyReport = await this.getMonthlyReports(startDate, endDate);
       result.monthlyData = monthlyReport;
     }
@@ -91,7 +92,7 @@ export class ReportService {
     startDate: string,
     endDate?: string,
   ): Promise<ReportMonthlyData> {
-    const reports = await this.getMonthlyReportsData();
+    const reports = await this.getMonthlyReportsData(startDate);
     
     // 다중 담당자 처리
     const processedReports = this.processMultiplePeople(reports);
@@ -432,13 +433,14 @@ export class ReportService {
   }
 
   /**
-   * 이번 달의 일일 보고서를 조회한다
-   * @returns 이번 달의 일일 보고서 데이터
+   * 특정 날짜가 속한 달의 일일 보고서를 조회한다
+   * @param startDate - 시작 날짜 (YYYY-MM-DD 형식)
+   * @returns 해당 달의 일일 보고서 데이터
    */
-  async getMonthlyReportsData() {
-    // 이번 달의 첫날과 마지막 날 가져오기
+  async getMonthlyReportsData(startDate: string) {
+    // 해당 날짜가 속한 달의 첫날과 마지막 날 가져오기
     const { firstDay: firstDayStr, lastDay: lastDayStr } =
-      getCurrentMonthRange();
+      getCurrentMonthRange(startDate);
 
     const filter = {
       and: [
