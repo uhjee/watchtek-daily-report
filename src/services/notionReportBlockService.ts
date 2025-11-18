@@ -133,7 +133,7 @@ export class NotionReportBlockService {
             '타이틀',
             '그룹',
             '진행도',
-            '공수(m/d)',
+            '공수(m/h)',
           ];
 
           // 테이블 데이터 생성 (PmsLink 활용)
