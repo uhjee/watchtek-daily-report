@@ -29,7 +29,7 @@ export type MemberMap = Record<string, MemberInfo>;
 export type ProgressRate = number;
 
 // 공수 타입
-export type ManDay = number;
+export type ManHour = number;
 
 // 정렬 방향 타입
 export type SortDirection = 'asc' | 'desc';

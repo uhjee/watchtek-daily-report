@@ -18,7 +18,7 @@ export interface DailyReportItem {
 
 // 일일 보고서 인터페이스 (공수 정보 포함)
 export interface DailyReport extends DailyReportItem {
-  manDay: number;
+  manHour: number;
 }
 
 // 서브그룹별로 그룹화된 보고서 아이템
@@ -91,7 +91,7 @@ export interface NotionPage {
         boolean: boolean;
       };
     };
-    ManDay: {
+    ManHour: {
       number: number;
     };
     PmsNumber?: {
@@ -124,15 +124,15 @@ export interface ReportForm {
 // 일일 보고서 데이터
 export interface ReportDailyData extends ReportForm {
   reportType: Extract<ReportType, 'daily'>;
-  manDayText: string;
-  manDayByGroupText?: string;
-  manDayByPerson?: ManDayByPersonWithReports[];
+  manHourText: string;
+  manHourByGroupText?: string;
+  manHourByPerson?: ManHourByPersonWithReports[];
 }
 
 // 주간 보고서 데이터
 export interface ReportWeeklyData extends Omit<ReportDailyData, 'text'> {
   reportType: Extract<ReportType, 'weekly'>;
-  manDayByGroupText: string;
+  manHourByGroupText: string;
   groupedReports: DailyReportGroup[];
 }
 
@@ -140,7 +140,7 @@ export interface ReportWeeklyData extends Omit<ReportDailyData, 'text'> {
 export interface ReportMonthlyData extends ReportWeeklyData {
   reportType: Extract<ReportType, 'monthly'>;
   isMonthlyReport: boolean;
-  manDayByPerson?: ManDayByPersonWithReports[];
+  manHourByPerson?: ManHourByPersonWithReports[];
 }
 
 // 전체 보고서 데이터
@@ -157,13 +157,13 @@ export type ReportDataForCreatePage =
   | ReportMonthlyData;
 
 // 인원별 공수 정보
-export interface ManDayByPerson {
+export interface ManHourByPerson {
   [key: string]: number;
 }
 
 // 인원별 공수 및 보고서 정보
-export interface ManDayByPersonWithReports {
+export interface ManHourByPersonWithReports {
   name: string;
-  totalManDay: number;
+  totalManHour: number;
   reports: DailyReport[];
 }

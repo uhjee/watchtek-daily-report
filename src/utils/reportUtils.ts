@@ -1,24 +1,8 @@
-import { DailyReport, DailyReportGroup, DailyReportItem } from '../types/report.d';
-import { ReportAggregationService } from '../services/reportAggregationService';
-import { NotionStringifyService } from '../services/notionStringifyService';
+import { DailyReportItem } from '../types/report.d';
 
 /**
  * 보고서 관련 유틸리티 함수들
  */
-
-/**
- * 보고서 배열에서 그룹별 공수를 계산한다
- * @param reports - 일일 보고서 데이터 배열
- * @returns 그룹별 공수 합계 객체
- */
-export function calculateManDayByGroup(reports: DailyReport[]): Record<string, number> {
-  return reports.reduce((acc, report) => {
-    acc[report.group] = (acc[report.group] ?? 0) + report.manDay;
-    return acc;
-  }, {} as Record<string, number>);
-}
-
-
 
 /**
  * 보고서 아이템의 제목을 포맷한다
@@ -61,46 +45,12 @@ export function formatReportGroupTitle(reportType: string, isWeekly: boolean = f
   if (isWeekly) {
     return reportType === '진행업무' ? '금주 진행 사항' : '차주 계획 사항';
   }
-  
+
   const titleMap: Record<string, string> = {
     '진행업무': '업무 진행 사항',
     '예정업무': '업무 계획 사항',
     '완료업무': '완료된 업무',
   };
-  
-  return titleMap[reportType] || `${reportType}`;
-}
 
-/**
- * 공수 데이터를 처리하여 텍스트로 변환하는 공통 함수
- * ReportService의 중복 패턴을 제거하기 위한 유틸리티
- * @param reports - 일일 보고서 데이터 배열
- * @param aggregationService - 공수 집계 서비스
- * @param stringifyService - 문자열 변환 서비스
- * @param includeGroupData - 그룹별 공수 데이터 포함 여부 (기본값: true)
- * @returns 공수 데이터 처리 결과
- */
-export function processManDayData(
-  reports: DailyReport[], 
-  aggregationService: ReportAggregationService,
-  stringifyService: NotionStringifyService,
-  includeGroupData: boolean = true
-) {
-  const manDaySummary = aggregationService.getManDaySummary(reports);
-  const manDayText = stringifyService.stringifyManDayMap(manDaySummary);
-  
-  let manDayByGroup;
-  let manDayByGroupText;
-  
-  if (includeGroupData) {
-    manDayByGroup = aggregationService.getManDayByGroup(reports);
-    manDayByGroupText = stringifyService.stringifyManDayMap(manDayByGroup, true);
-  }
-  
-  return { 
-    manDayText, 
-    manDayByGroupText, 
-    manDaySummary, 
-    manDayByGroup 
-  };
+  return titleMap[reportType] || `${reportType}`;
 }

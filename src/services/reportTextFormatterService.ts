@@ -1,7 +1,7 @@
 import {
   DailyReportGroup,
   ReportForm,
-  ManDayByPerson,
+  ManHourByPerson,
   DailyReport,
 } from '../types/report.d';
 import {
@@ -10,7 +10,10 @@ import {
 } from '../utils/reportUtils';
 import { formatDateToShortFormat } from '../utils/dateUtils';
 
-export class NotionStringifyService {
+/**
+ * 보고서 데이터를 텍스트로 변환하는 서비스
+ */
+export class ReportTextFormatterService {
   /**
    * 일일 보고서 데이터를 텍스트로 변환한다
    * @param reports - 포맷된 보고서 데이터
@@ -54,26 +57,26 @@ export class NotionStringifyService {
 
   /**
    * 공수 데이터를 포맷된 문자열로 변환한다
-   * @param manDayData - 멤버별 또는 그룹별 공수 데이터
+   * @param manHourData - 멤버별 또는 그룹별 공수 데이터
    * @param isGroup - 그룹별 공수 여부
    * @returns 포맷된 공수 문자열
    */
-  stringifyManDayMap(
-    manDayData: [string, number][] | ManDayByPerson,
+  stringifyManHourMap(
+    manHourData: [string, number][] | ManHourByPerson,
     isGroup = false,
   ): string {
     let result = `[${isGroup ? '그룹별' : '인원별'} 공수]\n`;
 
-    if (Array.isArray(manDayData)) {
+    if (Array.isArray(manHourData)) {
       // 배열 형태 (멤버별 공수)
-      manDayData.forEach(([name, value]) => {
-        result += `- ${name}: ${value} m/d\n`;
+      manHourData.forEach(([name, value]) => {
+        result += `- ${name}: ${value} m/h\n`;
       });
     } else {
       // 객체 형태 (그룹별 공수)
-      const entries = Object.entries(manDayData).sort((a, b) => b[1] - a[1]);
+      const entries = Object.entries(manHourData).sort((a, b) => b[1] - a[1]);
       entries.forEach(([name, value]) => {
-        result += `- ${name}: ${value} m/d\n`;
+        result += `- ${name}: ${value} m/h\n`;
       });
     }
 

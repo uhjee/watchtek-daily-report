@@ -5,20 +5,16 @@ import {
   ReportWeeklyData,
   ReportMonthlyData,
   ReportDailyData,
-  ManDayByPersonWithReports,
+  ManHourByPersonWithReports,
   DailyReportGroup,
 } from '../../types/report.d';
 import { splitTextIntoChunks } from '../../utils/stringUtils';
 import {
   createCodeBlocks,
   createParagraphBlock,
-  createPageProperties,
-  createPageIcon,
   createHeading2Block,
-  createManDayByPersonBlocks,
-  createWeeklyReportBlocksFromData,
-  createMonthlyReportBlocksFromData,
 } from '../../utils/notionBlockUtils';
+import { NotionReportBlockService } from '../notionReportBlockService';
 
 /**
  * 보고서 페이지 생성을 위한 추상 인터페이스
@@ -32,7 +28,11 @@ export interface ReportPageCreator {
  * Template Method Pattern 적용
  */
 export abstract class AbstractReportPageCreator implements ReportPageCreator {
-  constructor(protected notionApiService: NotionApiService) {}
+  protected reportBlockService: NotionReportBlockService;
+
+  constructor(protected notionApiService: NotionApiService) {
+    this.reportBlockService = new NotionReportBlockService();
+  }
 
   /**
    * 템플릿 메서드: 페이지 생성의 공통 플로우를 정의
@@ -42,8 +42,8 @@ export abstract class AbstractReportPageCreator implements ReportPageCreator {
     const contentBlocks = this.createContentBlocks(reportData, date);
     const allBlocks = [...blocks, ...contentBlocks];
 
-    const properties = createPageProperties(reportData.title, date, reportData.reportType);
-    const icon = createPageIcon(reportData.reportType);
+    const properties = this.reportBlockService.createPageProperties(reportData.title, date, reportData.reportType);
+    const icon = this.reportBlockService.createPageIcon(reportData.reportType);
     
     // 100개 블록 제한을 고려하여 첫 번째 청크로만 페이지 생성
     const BLOCK_LIMIT = 100;
@@ -60,8 +60,8 @@ export abstract class AbstractReportPageCreator implements ReportPageCreator {
       }
     }
 
-    // manDayByPerson 섹션 추가
-    await this.appendManDaySection(response.id, reportData);
+    // manHourByPerson 섹션 추가
+    await this.appendManHourSection(response.id, reportData);
 
     return response;
   }
@@ -73,7 +73,7 @@ export abstract class AbstractReportPageCreator implements ReportPageCreator {
     const headerText = this.getHeaderText();
     return [
       createHeading2Block(headerText),
-      createParagraphBlock(reportData.manDayText),
+      createParagraphBlock(reportData.manHourText),
     ];
   }
 
@@ -82,18 +82,18 @@ export abstract class AbstractReportPageCreator implements ReportPageCreator {
   /**
    * 개인별 공수 섹션 추가
    */
-  protected async appendManDaySection(pageId: string, reportData: ReportDataForCreatePage): Promise<void> {
+  protected async appendManHourSection(pageId: string, reportData: ReportDataForCreatePage): Promise<void> {
     const typedData = reportData as ReportWeeklyData | ReportMonthlyData | ReportDailyData;
-    if ('manDayByPerson' in typedData && typedData.manDayByPerson && typedData.manDayByPerson.length > 0) {
-      const manDayBlocks = [
+    if ('manHourByPerson' in typedData && typedData.manHourByPerson && typedData.manHourByPerson.length > 0) {
+      const manHourBlocks = [
         createHeading2Block('개인별 공수 및 진행 상황'),
-        ...createManDayByPersonBlocks(typedData.manDayByPerson),
+        ...this.reportBlockService.createManHourByPersonBlocks(typedData.manHourByPerson),
       ];
 
       // 100개씩 청크로 나누어 추가
       const BLOCK_LIMIT = 100;
-      for (let i = 0; i < manDayBlocks.length; i += BLOCK_LIMIT) {
-        const chunk = manDayBlocks.slice(i, i + BLOCK_LIMIT);
+      for (let i = 0; i < manHourBlocks.length; i += BLOCK_LIMIT) {
+        const chunk = manHourBlocks.slice(i, i + BLOCK_LIMIT);
         await this.notionApiService.appendBlocks(pageId, chunk);
       }
     }
@@ -114,11 +114,11 @@ export class DailyReportPageCreator extends AbstractReportPageCreator {
 
   protected createContentBlocks(reportData: ReportDataForCreatePage, date: string): BlockObjectRequest[] {
     const dailyData = reportData as ReportDailyData;
-    const { text, manDayByGroupText } = dailyData;
+    const { text, manHourByGroupText } = dailyData;
     const blocks: BlockObjectRequest[] = [];
 
-    if (manDayByGroupText) {
-      blocks.push(createParagraphBlock(manDayByGroupText));
+    if (manHourByGroupText) {
+      blocks.push(createParagraphBlock(manHourByGroupText));
     }
 
     // 텍스트를 청크로 분할하여 코드 블록 생성
@@ -141,13 +141,13 @@ export class WeeklyReportPageCreator extends AbstractReportPageCreator {
 
   protected createContentBlocks(reportData: ReportDataForCreatePage, date: string): BlockObjectRequest[] {
     const weeklyData = reportData as ReportWeeklyData;
-    const { manDayByGroupText, groupedReports } = weeklyData;
+    const { manHourByGroupText, groupedReports } = weeklyData;
     const blocks: BlockObjectRequest[] = [];
 
-    blocks.push(createParagraphBlock(manDayByGroupText));
+    blocks.push(createParagraphBlock(manHourByGroupText));
 
     if (groupedReports && groupedReports.length > 0) {
-      blocks.push(...createWeeklyReportBlocksFromData(groupedReports, date));
+      blocks.push(...this.reportBlockService.createWeeklyReportBlocksFromData(groupedReports, date));
     }
 
     return blocks;
@@ -164,13 +164,13 @@ export class MonthlyReportPageCreator extends AbstractReportPageCreator {
 
   protected createContentBlocks(reportData: ReportDataForCreatePage, date: string): BlockObjectRequest[] {
     const monthlyData = reportData as ReportMonthlyData;
-    const { manDayByGroupText, groupedReports } = monthlyData;
+    const { manHourByGroupText, groupedReports } = monthlyData;
     const blocks: BlockObjectRequest[] = [];
 
-    blocks.push(createParagraphBlock(manDayByGroupText));
+    blocks.push(createParagraphBlock(manHourByGroupText));
 
     if (groupedReports && groupedReports.length > 0) {
-      blocks.push(...createMonthlyReportBlocksFromData(groupedReports, date));
+      blocks.push(...this.reportBlockService.createMonthlyReportBlocksFromData(groupedReports, date));
     }
 
     return blocks;

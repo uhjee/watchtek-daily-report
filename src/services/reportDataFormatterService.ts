@@ -10,9 +10,9 @@ import { compareMemberPriorityByEmail } from '../utils/memberUtils';
 import { SortContext, ReportPrioritySortStrategy, GroupPrioritySortStrategy } from '../utils/sortStrategies';
 
 /**
- * 보고서 포맷팅을 담당하는 서비스
+ * 보고서 데이터 구조 변환을 담당하는 서비스
  */
-export class ReportFormatterService {
+export class ReportDataFormatterService {
   private memberService: MemberService;
 
   constructor() {
@@ -208,13 +208,13 @@ export class ReportFormatterService {
     const consolidatedPerson = uniquePersons.join(', ');
     
     // 공수는 합산
-    const totalManDay = taskReports.reduce((sum, report) => sum + (report.manDay || 0), 0);
+    const totalManHour = taskReports.reduce((sum, report) => sum + (report.manHour || 0), 0);
 
     return {
       ...baseReport,
       person: consolidatedPerson,
       progressRate: 0, // 진척률 제거
-      manDay: totalManDay,
+      manHour: totalManHour,
     };
   }
 
@@ -372,7 +372,7 @@ export class ReportFormatterService {
         date: item.date,
         isToday: item.isToday,
         isTomorrow: item.isTomorrow,
-        manDay: item.manDay ?? 0,
+        manHour: item.manHour ?? 0,
         pmsNumber: item.pmsNumber,
       });
     });
@@ -428,7 +428,7 @@ export class ReportFormatterService {
             date: report.date,
             isToday: report.isToday,
             isTomorrow: report.isTomorrow,
-            manDay: report.manDay ?? 0,
+            manHour: report.manHour ?? 0,
           })),
         },
       ],
@@ -461,17 +461,17 @@ export class ReportFormatterService {
    */
   distinctReports(reports: DailyReport[]): DailyReport[] {
     const uniqueMap = new Map<string, DailyReport>();
-    const manDaySumMap = new Map<string, number>();
+    const manHourSumMap = new Map<string, number>();
 
     // 보고서 처리
     reports.forEach((report) => {
       const key = this.generateDistinctKey(report);
-      this.updateManDaySum(manDaySumMap, key, report.manDay || 0);
+      this.updateManHourSum(manHourSumMap, key, report.manHour || 0);
       this.updateUniqueReport(uniqueMap, key, report);
     });
 
     // 최종 결과 생성
-    return this.buildDistinctResults(uniqueMap, manDaySumMap);
+    return this.buildDistinctResults(uniqueMap, manHourSumMap);
   }
 
   /**
@@ -489,14 +489,14 @@ export class ReportFormatterService {
   }
 
   /**
-   * manDay 합계 업데이트
-   * @param manDaySumMap - manDay 합계 맵
+   * manHour 합계 업데이트
+   * @param manHourSumMap - manHour 합계 맵
    * @param key - 보고서 키
-   * @param manDay - 추가할 manDay
+   * @param manHour - 추가할 manHour
    */
-  private updateManDaySum(manDaySumMap: Map<string, number>, key: string, manDay: number): void {
-    const currentManDay = manDaySumMap.get(key) || 0;
-    manDaySumMap.set(key, currentManDay + manDay);
+  private updateManHourSum(manHourSumMap: Map<string, number>, key: string, manHour: number): void {
+    const currentManHour = manHourSumMap.get(key) || 0;
+    manHourSumMap.set(key, currentManHour + manHour);
   }
 
   /**
@@ -534,16 +534,16 @@ export class ReportFormatterService {
   /**
    * 최종 중복 제거 결과 생성
    * @param uniqueMap - 고유 보고서 맵
-   * @param manDaySumMap - manDay 합계 맵
+   * @param manHourSumMap - manHour 합계 맵
    * @returns 중복 제거된 보고서 배열
    */
   private buildDistinctResults(
-    uniqueMap: Map<string, DailyReport>, 
-    manDaySumMap: Map<string, number>
+    uniqueMap: Map<string, DailyReport>,
+    manHourSumMap: Map<string, number>
   ): DailyReport[] {
     return Array.from(uniqueMap.entries()).map(([key, report]) => ({
       ...report,
-      manDay: manDaySumMap.get(key) || report.manDay || 0,
+      manHour: manHourSumMap.get(key) || report.manHour || 0,
     }));
   }
 }
