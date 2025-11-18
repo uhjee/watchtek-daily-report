@@ -33,17 +33,22 @@
 #### 핵심 서비스
 
 - **ReportService** (`src/services/reportService.ts`) - 보고서 생성 프로세스의 메인 오케스트레이터
-- **NotionApiService** (`src/services/notionApiService.ts`) - 순수 Notion API 호출 담당
-- **NotionPageService** (`src/services/notionPageService.ts`) - Notion 페이지 생성 로직 담당
-- **NotionService** (`src/services/notionService.ts`) - 상위 레벨 Notion 관련 로직
+- **NotionService** (`src/services/notionService.ts`) - NotionApiService와 NotionPageService의 파사드 (Facade Pattern)
+- **NotionApiService** (`src/services/notionApiService.ts`) - 순수 Notion API 호출 담당 (API 인터페이스 레이어)
+- **NotionPageService** (`src/services/notionPageService.ts`) - Notion 페이지 생성 로직 담당 (Factory Pattern 활용)
+- **NotionReportBlockService** (`src/services/notionReportBlockService.ts`) - Notion 보고서 블록 생성 담당 (도메인 로직 포함)
 - **SchedulerService** (`src/services/scheduler.ts`) - 크론 기반 스케줄링 관리
 
 #### 데이터 처리 서비스
 
-- **ReportAggregationService** - 데이터 집계 및 계산
-- **ReportFormatterService** - 데이터 포맷팅 및 구조화
-- **NotionStringifyService** - 데이터를 Notion 호환 텍스트로 변환
-- **MemberService** - 멤버 정보 및 매핑 관리
+- **ReportAggregationService** (`src/services/reportAggregationService.ts`) - 데이터 집계 및 계산
+- **ReportDataFormatterService** (`src/services/reportDataFormatterService.ts`) - 데이터 포맷팅 및 구조화
+- **ReportTextFormatterService** (`src/services/reportTextFormatterService.ts`) - 데이터를 텍스트로 변환
+- **MemberService** (`src/services/memberService.ts`) - 멤버 정보 및 매핑 관리
+
+#### 팩토리 패턴 구현
+
+- **ReportPageFactory** (`src/services/factories/reportPageFactory.ts`) - Factory Pattern + Template Method Pattern으로 보고서 타입별 페이지 생성
 
 ### 설정
 
@@ -55,12 +60,22 @@
 
 리팩토링을 통해 중복 코드를 제거하고 재사용성을 높인 유틸리티 함수들:
 
-- **dateUtils.ts** - 날짜 처리 및 포맷팅
-- **memberUtils.ts** - 멤버 우선순위 비교 및 처리
-- **sortStrategies.ts** - 정렬 로직 전략 패턴
-- **reportUtils.ts** - 보고서 관련 공통 로직
-- **stringUtils.ts** - 문자열 처리 유틸리티
-- **notionBlockUtils.ts** - Notion 블록 관련 유틸리티
+- **dateUtils.ts** (`src/utils/dateUtils.ts`) - 날짜 처리 및 포맷팅 (휴일 체크, 주차 계산 등)
+- **memberUtils.ts** (`src/utils/memberUtils.ts`) - 멤버 우선순위 비교 로직
+- **sortStrategies.ts** (`src/utils/sortStrategies.ts`) - 정렬 로직 전략 패턴 (Strategy Pattern)
+- **reportUtils.ts** (`src/utils/reportUtils.ts`) - 보고서 관련 공통 로직 (텍스트 포맷팅 등)
+- **stringUtils.ts** (`src/utils/stringUtils.ts`) - 문자열 처리 유틸리티 (청크 분할 등)
+- **notionBlockUtils.ts** (`src/utils/notionBlockUtils.ts`) - Notion 블록 생성 유틸리티 (순수 함수)
+
+### 타입 정의
+
+- **report.d.ts** (`src/types/report.d.ts`) - 보고서 관련 인터페이스 및 타입 (DailyReport, WeeklyReport, MonthlyReport 등)
+- **reportTypes.ts** (`src/types/reportTypes.ts`) - 보고서 타입 리터럴 및 기본 타입 정의
+- **dotenv.d.ts, holiday-kr.d.ts** - 외부 라이브러리 타입 선언
+
+### 상수
+
+- **reportConstants.ts** (`src/constants/reportConstants.ts`) - 보고서 관련 상수 (Notion 블록 길이 제한 등)
 
 ### 보고서 타입
 
@@ -72,10 +87,27 @@
 
 ### 데이터 플로우
 
-1. 스케줄러가 크론 스케줄에 따라 보고서 생성을 트리거
-2. ReportService가 관련 데이터에 대해 Notion 데이터베이스를 쿼리
-3. 각각의 서비스에 의해 데이터가 포맷팅되고 집계됨
-4. 포맷된 보고서가 Notion 보고서 데이터베이스에 다시 저장됨
+#### 일일 보고서 생성 플로우
+
+1. **스케줄링**: SchedulerService가 크론 스케줄에 따라 보고서 생성 트리거
+2. **데이터 조회**: ReportService가 NotionApiService를 통해 Notion 데이터베이스 쿼리
+3. **데이터 처리**:
+   - 다중 담당자 작업 분할 (processMultiplePeople)
+   - 중복 제거 (ReportDataFormatterService.distinctReports)
+   - 그룹화 및 정렬 (ReportDataFormatterService.formatDailyReports)
+4. **집계**: ReportAggregationService가 멤버별 공수 계산 및 우선순위 정렬
+5. **텍스트 변환**: ReportTextFormatterService가 포맷된 데이터를 텍스트로 변환
+6. **페이지 생성**: NotionPageService가 Factory Pattern을 사용하여 보고서 타입별 페이지 생성
+   - ReportPageFactory가 DailyReportPageCreator 선택
+   - Template Method Pattern으로 공통 플로우 실행
+   - NotionReportBlockService가 보고서 블록 생성
+   - NotionApiService가 Notion API 호출 (100개 블록 제한 자동 처리)
+
+#### 주간/월간 보고서 생성 플로우
+
+- 일일 보고서와 유사하나, 데이터 범위 및 포맷팅이 다름
+- 주간: 이번 주 전체 작업 정보 (금주 진행 사항)
+- 월간: 이번 달 전체 작업 정보 (진행업무/완료업무)
 
 ## 환경 설정
 
@@ -107,29 +139,71 @@ export default memberMap;
 
 ## 파일 구조
 
-- `src/` - 모든 TypeScript 소스 코드
-- `src/services/` - 비즈니스 로직을 처리하는 서비스 클래스들
-- `src/utils/` - 재사용 가능한 유틸리티 함수들
-- `src/types/` - TypeScript 타입 정의
-- `src/config/` - 설정 파일들
-- `src/constants/` - 상수 정의
-- `tests/` - 테스트 파일들 (현재 최소한으로 구성됨)
+```
+watchtek-daily-report/
+├── src/                      # 모든 TypeScript 소스 코드
+│   ├── services/             # 비즈니스 로직을 처리하는 서비스 클래스들
+│   │   └── factories/        # 팩토리 패턴 구현 (reportPageFactory.ts)
+│   ├── utils/                # 재사용 가능한 유틸리티 함수들
+│   ├── types/                # TypeScript 타입 정의
+│   ├── config/               # 설정 파일들
+│   └── constants/            # 상수 정의
+├── dist/                     # 컴파일된 JavaScript 출력
+├── executable/               # 패키징된 실행 파일
+└── node_modules/             # 의존성 패키지
+```
+
+## 적용된 디자인 패턴
+
+### Facade Pattern (파사드 패턴)
+- **NotionService**: NotionApiService와 NotionPageService를 통합하는 파사드
+- 하위 호환성을 유지하면서 내부 구조를 개선
+
+### Factory Pattern (팩토리 패턴)
+- **ReportPageFactory**: 보고서 타입에 따라 적절한 페이지 생성기 선택
+- DailyReportPageCreator, WeeklyReportPageCreator, MonthlyReportPageCreator
+
+### Template Method Pattern (템플릿 메서드 패턴)
+- **AbstractReportPageCreator**: 보고서 페이지 생성의 공통 플로우 정의
+- 각 서브클래스가 특정 단계를 구체적으로 구현
+
+### Strategy Pattern (전략 패턴)
+- **SortStrategies**: 다양한 정렬 로직을 전략 객체로 캡슐화
+- 멤버 우선순위, 보고서 우선순위, 그룹 우선순위 정렬
+
+### Service Layer Pattern (서비스 레이어 패턴)
+- 비즈니스 로직을 서비스 클래스로 분리
+- 각 서비스가 명확한 단일 책임을 가짐
+
+### Dependency Injection (의존성 주입)
+- 서비스 간 의존성을 생성자를 통해 주입
+- 테스트 용이성 및 결합도 감소
 
 ## 리팩토링 현황
 
 ### 완료된 개선사항
 
-1. **서비스 분리**: NotionService에서 NotionApiService와 NotionPageService로 분리
-2. **유틸리티 통합**: 중복된 로직을 유틸리티 함수로 추출
-3. **전략 패턴 적용**: 정렬 로직에 전략 패턴 적용
-4. **타입 안정성 향상**: 타입 정의 개선 및 확장
+1. **서비스 분리**:
+   - NotionService → NotionApiService + NotionPageService + NotionReportBlockService
+   - 관심사의 분리를 통한 명확한 책임 분담
+2. **팩토리 패턴 도입**:
+   - reportPageFactory로 보고서 타입별 페이지 생성 로직 분리
+   - Template Method Pattern으로 공통 플로우 추상화
+3. **유틸리티 통합**:
+   - 중복된 로직을 유틸리티 함수로 추출 (dateUtils, memberUtils 등)
+4. **전략 패턴 적용**:
+   - 정렬 로직을 Strategy 객체로 캡슐화
+5. **타입 안정성 향상**:
+   - report.d.ts, reportTypes.ts로 타입 정의 개선 및 확장
 
 ### 주요 개선점
 
 - **코드 중복 제거**: 멤버 우선순위 비교 로직, 날짜 포맷팅 등 통합
-- **단일 책임 원칙**: 각 서비스의 책임 명확화
+- **단일 책임 원칙**: 각 서비스의 책임 명확화 (API 호출, 페이지 생성, 블록 생성 분리)
 - **재사용성 향상**: 공통 로직의 유틸리티 함수화
 - **유지보수성 개선**: 관심사의 분리를 통한 코드 구조 개선
+- **확장성 향상**: Factory Pattern으로 새로운 보고서 타입 추가 용이
+- **Notion API 제약 처리**: 100개 블록 제한, 2000자 텍스트 제한 자동 처리
 
 ## 개발 가이드
 
@@ -138,10 +212,32 @@ export default memberMap;
 - 깔끔하고 유지보수 가능한 TypeScript 코드 작성
 - DRY 원칙에 따른 반복과 모듈화 강조
 - 메서드나 함수에 대한 주석은 역할을 표현하는 '문장'으로 명확하게 작성
+- 함수와 메서드는 단일 책임을 가지도록 작성
 
 ### 아키텍처 원칙
 
-- 서비스별 단일 책임 원칙 유지
-- 공통 로직은 유틸리티 함수로 추출
-- 타입 안정성을 위한 적절한 타입 정의
-- 의존성 주입 패턴 활용으로 테스트 용이성 확보
+- **단일 책임 원칙 (SRP)**: 각 서비스가 명확한 단일 책임을 가짐
+- **의존성 주입 (DI)**: 서비스 간 의존성을 생성자를 통해 주입
+- **관심사의 분리 (SoC)**: API 호출, 데이터 처리, 포맷팅, 텍스트 변환을 별도 서비스로 분리
+- **DRY 원칙**: 공통 로직을 유틸리티 함수로 추출
+- **타입 안정성**: 적절한 타입 정의로 컴파일 타임 오류 방지
+- **디자인 패턴 활용**: 재사용성과 확장성을 위한 패턴 적극 활용
+
+### 새로운 보고서 타입 추가 방법
+
+1. `src/types/reportTypes.ts`에 새로운 ReportType 리터럴 추가
+2. `src/services/factories/reportPageFactory.ts`에 새로운 Creator 클래스 작성
+3. `ReportPageFactory.createReportPage()`에 새로운 타입 케이스 추가
+4. `ReportService`에 새로운 보고서 생성 메서드 추가
+
+### Notion API 사용 시 주의사항
+
+- **100개 블록 제한**: `notionBlockUtils.chunkBlocks()` 사용 또는 Factory의 자동 처리 활용
+- **2000자 텍스트 제한**: `stringUtils.splitTextIntoChunks()` 사용
+- **페이지네이션**: `NotionApiService.queryDatabaseAll()` 사용으로 자동 처리
+
+### 보고서 정렬 우선순위
+
+1. **멤버 우선순위**: `src/config/members.ts`의 priority 값 기준
+2. **그룹 정렬**: DCIM프로젝트 우선 → 일반 그룹 → 특수 그룹 (사이트 지원, 결함처리, OJT, 회의, 기타)
+3. **보고서 정렬**: 진행률 내림차순 → 멤버 우선순위 오름차순
