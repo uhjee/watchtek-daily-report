@@ -161,9 +161,21 @@ export interface ManHourByPerson {
   [key: string]: number;
 }
 
+// 연차/반차 타입
+export type LeaveType = '연차' | '반차';
+
+// 연차/반차 정보
+export interface LeaveInfo {
+  date: string; // YYYY-MM-DD 형식
+  type: LeaveType;
+  dayOfWeek: string; // 요일 (월, 화, 수, ...)
+}
+
 // 인원별 공수 및 보고서 정보
 export interface ManHourByPersonWithReports {
   name: string;
   totalManHour: number;
   reports: DailyReport[];
+  leaveInfo?: LeaveInfo[]; // 연차/반차 정보
+  isCompleted?: boolean; // 작성 완료 여부 (일간 보고서용)
 }

@@ -262,7 +262,69 @@ export function isLastWeekdayOfMonth(dateString: string): boolean {
   if (!isLastWeekdayOfWeek(dateString)) {
     return false;
   }
-  
+
   // 2. 해당 월의 마지막 주인지 확인
   return isLastWeekOfMonth(dateString);
+}
+
+/**
+ * 이번 주 월요일부터 오늘까지의 날짜 범위를 반환
+ * @param today - YYYY-MM-DD 형식의 오늘 날짜
+ * @returns 이번 주 월요일과 오늘 날짜
+ */
+export function getThisWeekMondayToToday(today: string): { startDate: string; endDate: string } {
+  const date = new Date(today);
+  const dayOfWeek = date.getDay(); // 0: 일, 1: 월, ..., 6: 토
+
+  // 월요일까지의 일수 계산 (일요일인 경우 지난주 월요일)
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - daysToMonday);
+
+  return {
+    startDate: formatDateToYYYYMMDD(monday),
+    endDate: today,
+  };
+}
+
+/**
+ * 주어진 기간 내 근무일수를 계산 (월~금 중 휴일이 아닌 날짜 수)
+ * @param startDate - YYYY-MM-DD 형식의 시작 날짜
+ * @param endDate - YYYY-MM-DD 형식의 종료 날짜
+ * @returns 근무일수
+ */
+export function getWorkingDaysCount(startDate: string, endDate: string): number {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  let count = 0;
+  const current = new Date(start);
+
+  while (current <= end) {
+    const currentDateStr = formatDateToYYYYMMDD(current);
+    const dayOfWeek = current.getDay();
+
+    // 월~금 중 휴일이 아닌 날짜만 카운트
+    if (dayOfWeek >= 1 && dayOfWeek <= 5 && !isHoliday(currentDateStr)) {
+      count++;
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return count;
+}
+
+/**
+ * 날짜의 요일을 한국어로 반환
+ * @param dateString - YYYY-MM-DD 형식의 날짜 문자열
+ * @returns 요일 (월, 화, 수, 목, 금, 토, 일)
+ */
+export function getDayOfWeekKorean(dateString: string): string {
+  const date = new Date(dateString);
+  const dayOfWeek = date.getDay();
+
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  return days[dayOfWeek];
 }

@@ -3,6 +3,8 @@ import {
   ReportForm,
   ManHourByPerson,
   DailyReport,
+  ManHourByPersonWithReports,
+  LeaveInfo,
 } from '../types/report.d';
 import {
   formatReportItemText,
@@ -79,6 +81,54 @@ export class ReportTextFormatterService {
         result += `- ${name}: ${value} m/h\n`;
       });
     }
+
+    return result;
+  }
+
+  /**
+   * 연차/반차 정보를 포맷된 문자열로 변환한다
+   * @param leaveInfo - 연차/반차 정보 배열
+   * @returns 포맷된 연차/반차 문자열
+   */
+  private formatLeaveInfo(leaveInfo: LeaveInfo[]): string {
+    return leaveInfo
+      .map((leave) => {
+        const formattedDate = formatDateToShortFormat(leave.date);
+        return `${formattedDate}(${leave.dayOfWeek}) ${leave.type}`;
+      })
+      .join(', ');
+  }
+
+  /**
+   * 연차/반차 정보 및 작성 완료 여부를 포함한 공수 데이터를 포맷된 문자열로 변환한다
+   * @param manHourData - 인원별 공수 및 보고서 정보 배열
+   * @param includeCompletion - 작성 완료 여부 표시 여부 (일간 보고서용)
+   * @param includeLeave - 연차/반차 정보 표시 여부 (주간/월간 보고서용)
+   * @returns 포맷된 공수 문자열
+   */
+  stringifyManHourWithDetails(
+    manHourData: ManHourByPersonWithReports[],
+    includeCompletion: boolean = false,
+    includeLeave: boolean = false,
+  ): string {
+    let result = `[인원별 공수]\n`;
+
+    manHourData.forEach((personData) => {
+      let line = `- ${personData.name}: ${personData.totalManHour} m/h`;
+
+      // 작성 완료 여부 추가 (일간 보고서용)
+      if (includeCompletion && personData.isCompleted === true) {
+        line += ' (작성 완료)';
+      }
+
+      // 연차/반차 정보 추가 (주간/월간 보고서용)
+      if (includeLeave && personData.leaveInfo && personData.leaveInfo.length > 0) {
+        const leaveText = this.formatLeaveInfo(personData.leaveInfo);
+        line += ` (${leaveText})`;
+      }
+
+      result += line + '\n';
+    });
 
     return result;
   }

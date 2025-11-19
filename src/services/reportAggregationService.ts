@@ -1,7 +1,8 @@
-import { DailyReport, ManHourByPersonWithReports } from '../types/report.d';
+import { DailyReport, ManHourByPersonWithReports, LeaveInfo, LeaveType } from '../types/report.d';
 import { MemberService } from './memberService';
 import { compareMemberPriorityByName } from '../utils/memberUtils';
 import { SortContext, MemberPriorityByNameNumberSortStrategy, MemberPriorityByNameArraySortStrategy } from '../utils/sortStrategies';
+import { getWorkingDaysCount, getDayOfWeekKorean, formatDateToShortFormat } from '../utils/dateUtils';
 
 /**
  * 보고서 데이터 집계를 담당하는 서비스
@@ -139,5 +140,106 @@ export class ReportAggregationService {
       acc[report.group] = (acc[report.group] ?? 0) + report.manHour;
       return acc;
     }, {} as Record<string, number>);
+  }
+
+  /**
+   * 보고서 데이터에서 멤버별 연차/반차 정보를 추출합니다
+   * @param reports - 일일 보고서 데이터 배열
+   * @returns 멤버별 연차/반차 정보 Map
+   */
+  private getLeaveInfoByPerson(reports: DailyReport[]): Map<string, LeaveInfo[]> {
+    const leaveInfoMap = new Map<string, LeaveInfo[]>();
+
+    reports.forEach((report) => {
+      // Group='기타', SubGroup='연차' 또는 '반차'인 경우
+      if (report.group === '기타' && (report.subGroup === '연차' || report.subGroup === '반차')) {
+        const person = report.person;
+        const leaveInfo: LeaveInfo = {
+          date: report.date.start,
+          type: report.subGroup as LeaveType,
+          dayOfWeek: getDayOfWeekKorean(report.date.start),
+        };
+
+        if (!leaveInfoMap.has(person)) {
+          leaveInfoMap.set(person, []);
+        }
+        leaveInfoMap.get(person)?.push(leaveInfo);
+      }
+    });
+
+    // 각 멤버의 연차/반차 정보를 날짜순으로 정렬
+    leaveInfoMap.forEach((leaveList) => {
+      leaveList.sort((a, b) => a.date.localeCompare(b.date));
+    });
+
+    return leaveInfoMap;
+  }
+
+  /**
+   * 작성 완료 여부를 판단합니다 (일간 보고서용)
+   * @param personName - 멤버 이름
+   * @param totalManHour - 총 공수
+   * @param reports - 해당 멤버의 보고서 데이터 배열
+   * @param startDate - 시작 날짜 (YYYY-MM-DD)
+   * @param endDate - 종료 날짜 (YYYY-MM-DD)
+   * @returns 작성 완료 여부
+   */
+  private checkCompletionStatus(
+    personName: string,
+    totalManHour: number,
+    reports: DailyReport[],
+    startDate: string,
+    endDate: string,
+  ): boolean {
+    // 1. 해당 기간의 근무일수 계산
+    const workingDays = getWorkingDaysCount(startDate, endDate);
+
+    // 2. 기대되는 총 공수 계산 (근무일수 * 8)
+    const expectedManHour = workingDays * 8;
+
+    // 3. 실제 작성한 공수와 기대 공수 비교
+    return totalManHour === expectedManHour;
+  }
+
+  /**
+   * 보고서 데이터를 담당자별로 그룹화하고 연차/반차 정보 및 작성 완료 여부를 포함합니다
+   * @param reports - 일일 보고서 데이터 배열
+   * @param startDate - 시작 날짜 (작성 완료 판단용, optional)
+   * @param endDate - 종료 날짜 (작성 완료 판단용, optional)
+   * @returns 담당자별로 그룹화되고 연차/반차 정보가 포함된 보고서 데이터
+   */
+  getManHourByPersonWithLeaveInfo(
+    reports: DailyReport[],
+    startDate?: string,
+    endDate?: string,
+  ): ManHourByPersonWithReports[] {
+    // 1. 기존 로직으로 기본 데이터 생성
+    const basicData = this.getManHourByPerson(reports);
+
+    // 2. 연차/반차 정보 추출
+    const leaveInfoMap = this.getLeaveInfoByPerson(reports);
+
+    // 3. 각 멤버에 연차/반차 정보 및 작성 완료 여부 추가
+    return basicData.map((personData) => {
+      const leaveInfo = leaveInfoMap.get(personData.name) || [];
+
+      // 작성 완료 여부 판단 (startDate와 endDate가 있을 때만)
+      let isCompleted: boolean | undefined = undefined;
+      if (startDate && endDate) {
+        isCompleted = this.checkCompletionStatus(
+          personData.name,
+          personData.totalManHour,
+          personData.reports,
+          startDate,
+          endDate,
+        );
+      }
+
+      return {
+        ...personData,
+        leaveInfo: leaveInfo.length > 0 ? leaveInfo : undefined,
+        isCompleted,
+      };
+    });
   }
 }

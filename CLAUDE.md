@@ -42,8 +42,14 @@
 #### 데이터 처리 서비스
 
 - **ReportAggregationService** (`src/services/reportAggregationService.ts`) - 데이터 집계 및 계산
+  - 멤버별 공수 집계
+  - 연차/반차 정보 추출 (getLeaveInfoByPerson)
+  - 작성 완료 여부 판단 (checkCompletionStatus)
+  - getManHourByPersonWithLeaveInfo: 연차/반차 정보 및 작성 완료 여부를 포함한 데이터 생성
 - **ReportDataFormatterService** (`src/services/reportDataFormatterService.ts`) - 데이터 포맷팅 및 구조화
 - **ReportTextFormatterService** (`src/services/reportTextFormatterService.ts`) - 데이터를 텍스트로 변환
+  - stringifyManHourWithDetails: 연차/반차 정보 및 작성 완료 여부를 포함한 포맷팅
+  - formatLeaveInfo: 연차/반차 정보를 "YY.MM.DD(요일) 연차/반차" 형식으로 변환
 - **MemberService** (`src/services/memberService.ts`) - 멤버 정보 및 매핑 관리
 
 #### 팩토리 패턴 구현
@@ -60,7 +66,11 @@
 
 리팩토링을 통해 중복 코드를 제거하고 재사용성을 높인 유틸리티 함수들:
 
-- **dateUtils.ts** (`src/utils/dateUtils.ts`) - 날짜 처리 및 포맷팅 (휴일 체크, 주차 계산 등)
+- **dateUtils.ts** (`src/utils/dateUtils.ts`) - 날짜 처리 및 포맷팅
+  - 휴일 체크, 주차 계산
+  - 근무일수 계산 (getWorkingDaysCount)
+  - 이번 주 월요일부터 오늘까지 범위 계산 (getThisWeekMondayToToday)
+  - 요일을 한국어로 변환 (getDayOfWeekKorean)
 - **memberUtils.ts** (`src/utils/memberUtils.ts`) - 멤버 우선순위 비교 로직
 - **sortStrategies.ts** (`src/utils/sortStrategies.ts`) - 정렬 로직 전략 패턴 (Strategy Pattern)
 - **reportUtils.ts** (`src/utils/reportUtils.ts`) - 보고서 관련 공통 로직 (텍스트 포맷팅 등)
@@ -69,7 +79,10 @@
 
 ### 타입 정의
 
-- **report.d.ts** (`src/types/report.d.ts`) - 보고서 관련 인터페이스 및 타입 (DailyReport, WeeklyReport, MonthlyReport 등)
+- **report.d.ts** (`src/types/report.d.ts`) - 보고서 관련 인터페이스 및 타입
+  - DailyReport, WeeklyReport, MonthlyReport 등 보고서 데이터 타입
+  - LeaveInfo, LeaveType - 연차/반차 정보 타입
+  - ManHourByPersonWithReports - 인원별 공수 정보 (연차/반차 정보 및 작성 완료 여부 포함)
 - **reportTypes.ts** (`src/types/reportTypes.ts`) - 보고서 타입 리터럴 및 기본 타입 정의
 - **dotenv.d.ts, holiday-kr.d.ts** - 외부 라이브러리 타입 선언
 
@@ -82,8 +95,13 @@
 애플리케이션은 세 가지 유형의 보고서를 생성합니다:
 
 1. **일일 보고서** - 오늘/내일 작업 정보가 포함된 매일 생성
+   - 최상단 [인원별 공수]: 주간 누적 공수 표시 (이번 주 월요일부터 오늘까지)
+   - 작성 완료 표시: 개인이 작성한 공수가 (근무일수 * 8m/h)와 같으면 "(작성 완료)" 표기
+   - 근무일수: 이번 주 월요일부터 오늘까지 중 공휴일을 제외한 평일(월~금) 수
 2. **주간 보고서** - 주 요약이 포함된 금요일 생성
+   - [인원별 공수]: 연차/반차 정보 표시 (예: "25.11.11(수) 연차")
 3. **월간 보고서** - 매월 마지막 금요일에 생성
+   - [인원별 공수]: 연차/반차 정보 표시 (주간 보고서와 동일)
 
 ### 데이터 플로우
 
@@ -96,7 +114,11 @@
    - 중복 제거 (ReportDataFormatterService.distinctReports)
    - 그룹화 및 정렬 (ReportDataFormatterService.formatDailyReports)
 4. **집계**: ReportAggregationService가 멤버별 공수 계산 및 우선순위 정렬
+   - 주간 데이터 기반으로 공수 집계 (이번 주 월요일부터 오늘까지)
+   - 연차/반차 정보 추출 (Group='기타', SubGroup='연차'/'반차')
+   - 작성 완료 여부 판단 (총 공수 === 근무일수 * 8m/h)
 5. **텍스트 변환**: ReportTextFormatterService가 포맷된 데이터를 텍스트로 변환
+   - stringifyManHourWithDetails로 작성 완료 여부 포함
 6. **페이지 생성**: NotionPageService가 Factory Pattern을 사용하여 보고서 타입별 페이지 생성
    - ReportPageFactory가 DailyReportPageCreator 선택
    - Template Method Pattern으로 공통 플로우 실행
@@ -107,7 +129,10 @@
 
 - 일일 보고서와 유사하나, 데이터 범위 및 포맷팅이 다름
 - 주간: 이번 주 전체 작업 정보 (금주 진행 사항)
+  - 연차/반차 정보를 포함한 [인원별 공수] 생성
+  - stringifyManHourWithDetails로 연차/반차 정보 포함 (예: "25.11.11(수) 연차")
 - 월간: 이번 달 전체 작업 정보 (진행업무/완료업무)
+  - 연차/반차 정보를 포함한 [인원별 공수] 생성 (주간 보고서와 동일)
 
 ## 환경 설정
 

@@ -7,6 +7,7 @@ import {
   isHoliday,
   isLastWeekdayOfWeek,
   isLastWeekdayOfMonth,
+  getThisWeekMondayToToday,
 } from '../utils/dateUtils';
 import {
   DailyReport,
@@ -91,10 +92,10 @@ export class ReportService {
     endDate?: string,
   ): Promise<ReportMonthlyData> {
     const reports = await this.getMonthlyReportsData(startDate);
-    
+
     // 다중 담당자 처리
     const processedReports = this.processMultiplePeople(reports);
-    
+
     const formattedReports = this.formatReportData(processedReports);
     // 중복 제거 처리
     const distinctReports =
@@ -102,12 +103,19 @@ export class ReportService {
     const groupedReports =
       this.formatterService.formatMonthlyReports(distinctReports);
 
+    // 연차/반차 정보를 포함한 manHourByPerson 생성
     const manHourByPerson =
-      this.aggregationService.getManHourByPerson(distinctReports);
+      this.aggregationService.getManHourByPersonWithLeaveInfo(distinctReports);
+
+    // 연차/반차 정보를 포함한 manHourText 생성
+    const manHourText = this.stringifyService.stringifyManHourWithDetails(
+      manHourByPerson,
+      false, // includeCompletion: 작성 완료 여부 미표시
+      true,  // includeLeave: 연차/반차 정보 표시
+    );
 
     const title = this.notionService.generateMonthlyReportTitle(startDate);
     const {
-      manHourText,
       manHourByGroupText,
       manHourSummary: monthlyManHourSummary,
       manHourByGroup: monthlyManHourSummaryByGroup,
@@ -135,10 +143,10 @@ export class ReportService {
     endDate?: string,
   ): Promise<ReportWeeklyData> {
     const reports = await this.getWeeklyReportsData();
-    
+
     // 다중 담당자 처리
     const processedReports = this.processMultiplePeople(reports);
-    
+
     const formattedReports = this.formatReportData(processedReports);
 
     // 중복 제거 처리
@@ -147,12 +155,19 @@ export class ReportService {
     const groupedReports =
       this.formatterService.formatWeeklyReports(distinctReports);
 
+    // 연차/반차 정보를 포함한 manHourByPerson 생성
     const manHourByPerson =
-      this.aggregationService.getManHourByPerson(distinctReports);
+      this.aggregationService.getManHourByPersonWithLeaveInfo(distinctReports);
+
+    // 연차/반차 정보를 포함한 manHourText 생성
+    const manHourText = this.stringifyService.stringifyManHourWithDetails(
+      manHourByPerson,
+      false, // includeCompletion: 작성 완료 여부 미표시
+      true,  // includeLeave: 연차/반차 정보 표시
+    );
 
     const title = this.notionService.generateWeeklyReportTitle(startDate);
     const {
-      manHourText,
       manHourByGroupText,
       manHourSummary: weeklyManHourSummary,
       manHourByGroup: weeklyManHourSummaryByGroup,
@@ -181,8 +196,8 @@ export class ReportService {
     // 일일 데이터 처리
     const dailyData = await this.processDailyData(startDate);
 
-    // 주간 데이터 처리 (manDayByPerson 계산용)
-    const weeklyData = await this.processWeeklyDataForDaily();
+    // 주간 데이터 처리 (manHourByPerson 계산용, startDate를 오늘 날짜로 전달)
+    const weeklyData = await this.processWeeklyDataForDaily(startDate);
 
     // 결과 조합
     return this.buildDailyReportResult(startDate, dailyData, weeklyData);
@@ -215,27 +230,41 @@ export class ReportService {
 
   /**
    * 일일 보고서를 위한 주간 데이터 처리
+   * @param today - 오늘 날짜 (YYYY-MM-DD)
    * @returns 처리된 주간 데이터
    */
-  private async processWeeklyDataForDaily() {
+  private async processWeeklyDataForDaily(today: string) {
     // 1. 주간 데이터 조회 및 포맷팅
     const weeklyReports = await this.getWeeklyReportsData();
-    
+
     // 2. 다중 담당자 처리
     const processedWeeklyReports = this.processMultiplePeople(weeklyReports);
-    
+
     const formattedWeeklyReports = this.formatReportData(processedWeeklyReports);
     const distinctWeeklyReports = this.formatterService.distinctReports(
       formattedWeeklyReports,
     );
 
-    // 3. 주간 데이터 집계
-    const manHourByPerson = this.aggregationService.getManHourByPerson(
+    // 3. 이번 주 월요일부터 오늘까지의 날짜 범위 계산
+    const { startDate, endDate } = getThisWeekMondayToToday(today);
+
+    // 4. 주간 데이터 집계 (연차/반차 정보 및 작성 완료 여부 포함)
+    const manHourByPerson = this.aggregationService.getManHourByPersonWithLeaveInfo(
       distinctWeeklyReports,
+      startDate,
+      endDate,
     );
+
+    // 5. 작성 완료 여부를 포함한 manHourText 생성
+    const manHourText = this.stringifyService.stringifyManHourWithDetails(
+      manHourByPerson,
+      true, // includeCompletion: 작성 완료 여부 표시
+      false, // includeLeave: 연차/반차 정보 미표시 (일간 보고서)
+    );
+
     const { manHourByGroupText } = this.processManHourData(distinctWeeklyReports);
 
-    return { manHourByPerson, manHourByGroupText };
+    return { manHourByPerson, manHourByGroupText, manHourText };
   }
 
   /**
@@ -275,7 +304,7 @@ export class ReportService {
   private buildDailyReportResult(
     startDate: string,
     dailyData: { groupedReports: any; title: string; manHourText: string },
-    weeklyData: { manHourByPerson: any; manHourByGroupText: string },
+    weeklyData: { manHourByPerson: any; manHourByGroupText: string; manHourText: string },
   ): ReportDailyData {
     return {
       reportType: 'daily',
@@ -284,7 +313,7 @@ export class ReportService {
         dailyData.groupedReports,
         startDate,
       ).text,
-      manHourText: dailyData.manHourText,
+      manHourText: weeklyData.manHourText, // 주간 데이터 기반 manHourText 사용
       manHourByGroupText: weeklyData.manHourByGroupText,
       manHourByPerson: weeklyData.manHourByPerson,
     };
